@@ -1,0 +1,33 @@
+{
+  "model_type": "RandomForestClassifier",
+  "training_date": "2026-04-19T18:45:36.240704",
+  "accuracy": 1.0,
+  "n_estimators": 100,
+  "max_depth": 15,
+  "training_samples": 32,
+  "test_samples": 8,
+  "classes": [
+    "high",
+    "low",
+    "medium"
+  ],
+  "feature_names": [
+    "Progress Lag (Gap)",
+    "Stage Completion Rate",
+    "Task Completion Rate",
+    "Meeting Count",
+    "Days Passed",
+    "Topic Status",
+    "Current Progress"
+  ],
+  "feature_importance": {
+    "Progress Lag (Gap)": 0.24465337841261925,
+    "Stage Completion Rate": 0.09191882406125473,
+    "Task Completion Rate": 0.15383839882637151,
+    "Meeting Count": 0.049514559674890095,
+    "Days Passed": 0.0,
+    "Topic Status": 0.17960294160922938,
+    "Current Progress": 0.28047189741563516
+  },
+  "status": "production"
+}

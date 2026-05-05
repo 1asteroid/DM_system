@@ -1,0 +1,124 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+**/.env
+bot/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Frontend
+node_modules/
+dist/
+.vite/
+*.log
+
+# Uploads
+uploads/
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+pgdata/
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Testing & Coverage
+.pytest_cache/
+coverage.xml
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Temporary files
+*.tmp
+*.bak
+*.temp
+.ipynb_checkpoints/
+
+# IDE-specific
+*.iml
+.gradle
+*.iws
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Package managers
+package-lock.json
+yarn.lock
+.yarn.lock
+
+# API Keys & Secrets
+.secret
+*.pem
+*.key
+secrets.json
+
+# Vite
+.vite/
+
+# Development
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Backend specific
+backend/uploads/*
+!backend/uploads/.gitkeep
+*.pid
+
+# Frontend specific
+src/**.css.map
+src/**.js.map
+
+__pycache__/
+*.pyc
