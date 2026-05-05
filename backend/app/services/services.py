@@ -7,14 +7,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import aiohttp
-import joblib
-import numpy as np
+# joblib, numpy and sklearn used only by ML parts — import lazily to avoid startup failures on restricted hosts
+try:
+    import joblib
+except Exception:  # pragma: no cover - optional
+    joblib = None
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - optional
+    np = None
+
 from fastapi import HTTPException, UploadFile, status
 from fastapi.responses import FileResponse as StarletteFileResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sklearn.preprocessing import StandardScaler
+# sklearn will be imported where needed
 
 logger = logging.getLogger(__name__)
 

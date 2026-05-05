@@ -1,18 +1,26 @@
 import asyncio
+import importlib.util
 import os
 import sys
 from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import unquote
 
-BASE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(BASE_DIR))
+ROOT_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = ROOT_DIR / "backend"
+APP_MAIN = BACKEND_DIR / "app" / "main.py"
+sys.path.insert(0, str(BACKEND_DIR))
 
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
-from app.main import app as fastapi_app
+spec = importlib.util.spec_from_file_location("backend_app_main", APP_MAIN)
+if spec is None or spec.loader is None:
+    raise RuntimeError(f"Cannot load FastAPI app from {APP_MAIN}")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+fastapi_app = module.app
 
 
 class ASGIToWSGI:
