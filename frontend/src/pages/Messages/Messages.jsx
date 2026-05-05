@@ -40,9 +40,7 @@ export default function Messages() {
   const [supervisorGroup, setSupervisorGroup] = useState(null) // { supervisor_user_id, name }
   const bottomRef = useRef(null)
   const wsRef = useRef(null)
-  const reconnectRef = useRef(null)
   const selectedRef = useRef(null)
-  const reconnectEnabledRef = useRef(true)
   useEffect(() => { selectedRef.current = selected }, [selected])
 
   const loadContacts = useCallback(async () => {
@@ -51,6 +49,20 @@ export default function Messages() {
       setContacts(data)
     } catch { /* silent */ }
     finally { setLoading(false) }
+  }, [])
+
+  const refreshCurrentConversation = useCallback(async () => {
+    const current = selectedRef.current
+    if (!current) return
+    try {
+      if (current.type === 'supervisor_group') {
+        const { data } = await messagesContactsApi.supervisorGroup(current.supervisor_user_id)
+        setMessages(data)
+      } else {
+        const { data } = await messagesContactsApi.conversation(current.user_id)
+        setMessages(data)
+      }
+    } catch { /* silent */ }
   }, [])
 
   // Load supervisor group info
@@ -148,15 +160,11 @@ export default function Messages() {
     const token = localStorage.getItem('access_token')
     if (!token) return
 
-    clearTimeout(reconnectRef.current)
-
     const prevWs = wsRef.current
     if (prevWs && (prevWs.readyState === WebSocket.OPEN || prevWs.readyState === WebSocket.CONNECTING)) {
       prevWs.onclose = null
       prevWs.close()
     }
-
-    reconnectEnabledRef.current = true
 
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
     const wsUrl = `${protocol}://${location.host}/ws?token=${encodeURIComponent(token)}`
@@ -217,18 +225,15 @@ export default function Messages() {
     }
 
     ws.onclose = () => {
-      if (!reconnectEnabledRef.current) return
-      reconnectRef.current = setTimeout(() => connectWs(), 3000)
+      // cPanel/Passenger often blocks WebSocket; the polling fallback below keeps chat usable.
     }
-    ws.onerror = () => { ws.close() }
+    ws.onerror = () => { try { ws.close() } catch { /* silent */ } }
   }, [user?.id, loadContacts])
 
   useEffect(() => { loadContacts(); loadSupervisorGroup() }, [loadContacts, loadSupervisorGroup])
   useEffect(() => {
     connectWs()
     return () => {
-      reconnectEnabledRef.current = false
-      clearTimeout(reconnectRef.current)
       if (wsRef.current) {
         wsRef.current.onclose = null
         wsRef.current.close()
@@ -236,6 +241,16 @@ export default function Messages() {
       }
     }
   }, [connectWs])
+
+  useEffect(() => {
+    const sync = async () => {
+      await loadContacts()
+      await refreshCurrentConversation()
+    }
+    sync()
+    const interval = setInterval(sync, 12000)
+    return () => clearInterval(interval)
+  }, [loadContacts, refreshCurrentConversation])
 
   const filteredContacts = contacts.filter(c => c.full_name.toLowerCase().includes(search.toLowerCase()))
 
