@@ -40,6 +40,7 @@ export default function Messages() {
   const [supervisorGroup, setSupervisorGroup] = useState(null) // { supervisor_user_id, name }
   const bottomRef = useRef(null)
   const wsRef = useRef(null)
+  const reconnectRef = useRef(null)
   const selectedRef = useRef(null)
   useEffect(() => { selectedRef.current = selected }, [selected])
 
@@ -160,6 +161,11 @@ export default function Messages() {
     const token = localStorage.getItem('access_token')
     if (!token) return
 
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current)
+      reconnectRef.current = null
+    }
+
     const prevWs = wsRef.current
     if (prevWs && (prevWs.readyState === WebSocket.OPEN || prevWs.readyState === WebSocket.CONNECTING)) {
       prevWs.onclose = null
@@ -170,6 +176,15 @@ export default function Messages() {
     const wsUrl = `${protocol}://${location.host}/ws?token=${encodeURIComponent(token)}`
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
+
+    const scheduleReconnect = () => {
+      if (!localStorage.getItem('access_token')) return
+      if (reconnectRef.current) return
+      reconnectRef.current = setTimeout(() => {
+        reconnectRef.current = null
+        connectWs()
+      }, 3000)
+    }
 
     ws.onmessage = (e) => {
       let event
@@ -225,15 +240,22 @@ export default function Messages() {
     }
 
     ws.onclose = () => {
-      // cPanel/Passenger often blocks WebSocket; the polling fallback below keeps chat usable.
+      // cPanel/Passenger often blocks WebSocket; production uses reconnect + polling fallback.
+      scheduleReconnect()
     }
-    ws.onerror = () => { try { ws.close() } catch { /* silent */ } }
+    ws.onerror = () => {
+      try { ws.close() } catch { /* silent */ }
+    }
   }, [user?.id, loadContacts])
 
   useEffect(() => { loadContacts(); loadSupervisorGroup() }, [loadContacts, loadSupervisorGroup])
   useEffect(() => {
     connectWs()
     return () => {
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current)
+        reconnectRef.current = null
+      }
       if (wsRef.current) {
         wsRef.current.onclose = null
         wsRef.current.close()

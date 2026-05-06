@@ -53,8 +53,10 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    environment:
+      DOMAIN: ${DOMAIN}
     volumes:
-      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx.conf:/etc/nginx/templates/default.conf.template:ro
       - ./letsencrypt:/etc/letsencrypt:ro
       - ./certbot-www:/var/www/certbot
     ports:
@@ -71,8 +73,6 @@ volumes:
   postgres_data:
   uploads_data:
   models_data:
-  letsencrypt:
-  certbot-www:
 
 networks:
   web:

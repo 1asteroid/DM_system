@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { meetingsApi } from '../../api/api'
+import { meetingsApi, usersApi } from '../../api/api'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
 import { Calendar, Plus, Trash2, X, MapPin, Clock, CheckCircle, XCircle } from 'lucide-react'
@@ -25,16 +25,24 @@ function CreateMeetingModal({ isSupervisor, onClose, onSuccess }) {
   useEffect(() => {
     if (!isSupervisor) return
 
+    const normalizeStudents = (rows = []) => rows
+      .map((s) => ({
+        id: s.student_id ?? s.id,
+        full_name: s.student_name ?? s.full_name,
+      }))
+      .filter((s) => s.id && s.full_name)
+
     const loadStudents = async () => {
       setStudentsLoading(true)
       try {
-        const r = await meetingsApi.myStudents()
-        const normalized = (r.data || [])
-          .map((s) => ({
-            id: s.student_id ?? s.id,
-            full_name: s.student_name ?? s.full_name,
-          }))
-          .filter((s) => s.id && s.full_name)
+        const assignedRes = await meetingsApi.myStudents()
+        let normalized = normalizeStudents(assignedRes.data || [])
+
+        if (normalized.length === 0) {
+          const allStudentsRes = await usersApi.list('student')
+          normalized = normalizeStudents(allStudentsRes.data || [])
+        }
+
         setStudents(normalized)
       } catch {
         setStudents([])
