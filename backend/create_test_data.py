@@ -82,7 +82,7 @@ def _slugify(full_name: str) -> str:
 
 def _pick_status() -> TopicStatus:
     r = random.random()
-    if r < 0.58:
+    if r < 0.62:
         return TopicStatus.APPROVED
     if r < 0.82:
         return TopicStatus.PENDING
@@ -304,6 +304,10 @@ async def create_realistic_data(
 
         print("[seed] Creating topics, stages, tasks, meetings, files, analyses...")
         topic_count = 0
+        active_topic_count = 0
+        draft_topic_count = 0
+        pending_topic_count = 0
+        rejected_topic_count = 0
         file_count = 0
         message_count = 0
         notification_count = 0
@@ -317,13 +321,18 @@ async def create_realistic_data(
             sup_users = supervisor_users_by_kafedra[kaf.id]
 
             for idx, (student_user, student_profile) in enumerate(students):
-                sup_profile = sup_profiles[idx % len(sup_profiles)]
-                sup_user = sup_users[idx % len(sup_users)]
                 topic_status = _pick_status()
+                is_active_topic = topic_status == TopicStatus.APPROVED
                 risk_level, risk_score, progress = _risk_bucket(topic_status)
 
                 created_at = now - timedelta(days=random.randint(20, 180))
                 defense_date = created_at + timedelta(days=random.randint(120, 260))
+
+                assigned_sup_profile = None
+                assigned_sup_user = None
+                if is_active_topic:
+                    assigned_sup_profile = sup_profiles[idx % len(sup_profiles)]
+                    assigned_sup_user = sup_users[idx % len(sup_users)]
 
                 topic = DiplomaTopic(
                     title=f"{random.choice(TOPIC_TITLES)} #{idx + 1}",
@@ -331,9 +340,9 @@ async def create_realistic_data(
                     description="Realistik demo ma'lumotlar asosida yaratilgan diplom mavzusi.",
                     status=topic_status,
                     academic_year=academic_year,
-                    progress=float(progress),
+                    progress=float(progress if is_active_topic else 0.0),
                     student_id=student_profile.id,
-                    supervisor_id=sup_profile.id,
+                    supervisor_id=assigned_sup_profile.id if assigned_sup_profile else None,
                     reviewer_id=random.choice(heads).id,
                     reject_reason="Tadqiqot maqsadi aniq emas" if topic_status == TopicStatus.REJECTED else None,
                     approved_at=created_at + timedelta(days=10) if topic_status == TopicStatus.APPROVED else None,
@@ -346,6 +355,65 @@ async def create_realistic_data(
                 session.add(topic)
                 await session.flush()
                 topic_count += 1
+
+                if topic_status == TopicStatus.APPROVED:
+                    active_topic_count += 1
+                elif topic_status == TopicStatus.DRAFT:
+                    draft_topic_count += 1
+                elif topic_status == TopicStatus.PENDING:
+                    pending_topic_count += 1
+                else:
+                    rejected_topic_count += 1
+
+                # Draft / pending / rejected topics stop at topic level.
+                # Only approved topics get a supervisor, stages, tasks, meetings and file workflow.
+                if topic_status != TopicStatus.APPROVED:
+                    # Keep one lightweight real file for topic-level upload testing
+                    ext = random.choice(["pdf", "docx", "txt"])
+                    body = (
+                        f"Mavzu: {topic.title}\n"
+                        f"Talaba: {student_user.full_name}\n"
+                        f"Holat: {topic_status.value}\n"
+                        "Bu qoralama / ko'rib chiqilayotgan mavzu uchun biriktirilgan namunaviy fayl."
+                    )
+                    stored_name, fsize, display_name = _write_upload_file(upload_dir, topic.id, None, ext, body)
+                    session.add(DiplomaFile(
+                        topic_id=topic.id,
+                        stage_id=None,
+                        uploaded_by=student_user.id,
+                        file_name=display_name,
+                        file_path=stored_name,
+                        file_size=fsize,
+                        file_type=ext,
+                        version=1,
+                        is_final=False,
+                        plagiat_score=round(random.uniform(4, 28), 2),
+                        created_at=created_at + timedelta(days=2),
+                    ))
+                    file_count += 1
+
+                    # Minimal conversation for draft topics, useful for UI tests
+                    session.add(Message(
+                        sender_id=student_user.id,
+                        receiver_id=random.choice(heads).id,
+                        topic_id=topic.id,
+                        content="Mavzu qoralama holatda. Iltimos, ko'rib chiqing.",
+                        is_read=random.random() < 0.5,
+                        created_at=now - timedelta(days=random.randint(0, 8)),
+                    ))
+                    message_count += 1
+
+                    session.add(Notification(
+                        user_id=student_user.id,
+                        type=NotificationType.STATUS_CHANGED,
+                        title="Qoralama mavzu yaratildi",
+                        body="Sizning mavzuyingiz qoralama holatda saqlandi.",
+                        is_read=False,
+                        sent_to_tg=random.random() < 0.5,
+                        created_at=now - timedelta(hours=random.randint(1, 72)),
+                    ))
+                    notification_count += 1
+                    continue
 
                 stage_statuses = _stage_statuses(topic_status)
                 stages: list[DiplomaStage] = []
@@ -371,7 +439,7 @@ async def create_realistic_data(
                     done = random.random() < (0.70 if topic_status == TopicStatus.APPROVED else 0.35)
                     task = Task(
                         topic_id=topic.id,
-                        created_by=sup_user.id,
+                        created_by=assigned_sup_user.id,
                         title=f"Vazifa #{t+1}: {random.choice(['hisobot', 'kod', 'tahlil', 'test'])}",
                         description="Nazorat uchun topshiriq.",
                         deadline=created_at + timedelta(days=20 + t * 8),
@@ -393,13 +461,13 @@ async def create_realistic_data(
                         location=random.choice(["Zoom", "Google Meet", "Kafedra 204-xona"]),
                         status=mt_status,
                         notes="Muhokama qilindi" if mt_status == MeetingStatus.COMPLETED else None,
-                        created_by=sup_user.id,
+                        created_by=assigned_sup_user.id,
                         created_at=created_at,
                     )
                     session.add(meeting)
                     await session.flush()
                     session.add(MeetingAttendee(meeting_id=meeting.id, user_id=student_user.id))
-                    session.add(MeetingAttendee(meeting_id=meeting.id, user_id=sup_user.id))
+                    session.add(MeetingAttendee(meeting_id=meeting.id, user_id=assigned_sup_user.id))
 
                 await session.flush()
 
@@ -410,7 +478,7 @@ async def create_realistic_data(
                     body = (
                         f"Mavzu: {topic.title}\n"
                         f"Talaba: {student_user.full_name}\n"
-                        f"Rahbar: {sup_user.full_name}\n"
+                        f"Rahbar: {assigned_sup_user.full_name}\n"
                         f"Bosqich: {stages[min(fidx, len(stages)-1)].name}\n"
                         "Bu fayl test maqsadida avtomatik yaratildi."
                     )
@@ -467,8 +535,8 @@ async def create_realistic_data(
 
                 for mi in range(random.randint(2, 5)):
                     session.add(Message(
-                        sender_id=student_user.id if mi % 2 == 0 else sup_user.id,
-                        receiver_id=sup_user.id if mi % 2 == 0 else student_user.id,
+                        sender_id=student_user.id if mi % 2 == 0 else assigned_sup_user.id,
+                        receiver_id=assigned_sup_user.id if mi % 2 == 0 else student_user.id,
                         topic_id=topic.id,
                         content=random.choice([
                             "Ustoz, bugungi natijalar tayyor.",
@@ -483,7 +551,7 @@ async def create_realistic_data(
 
                 for noti_user_id, title, body in [
                     (student_user.id, "Yangi topshiriq", "Rahbar tomonidan yangi topshiriq qo'shildi"),
-                    (sup_user.id, "Talaba fayl yukladi", "Talaba yangi fayl yubordi"),
+                    (assigned_sup_user.id, "Talaba fayl yukladi", "Talaba yangi fayl yubordi"),
                 ]:
                     session.add(Notification(
                         user_id=noti_user_id,
@@ -505,6 +573,10 @@ async def create_realistic_data(
         print("\n[seed] COMPLETED")
         print(f"  users_total_created: {users_created}")
         print(f"  topics: {topic_count}")
+        print(f"  approved_topics: {active_topic_count}")
+        print(f"  draft_topics: {draft_topic_count}")
+        print(f"  pending_topics: {pending_topic_count}")
+        print(f"  rejected_topics: {rejected_topic_count}")
         print(f"  files: {file_count}")
         print(f"  messages: {message_count}")
         print(f"  notifications: {notification_count}")
