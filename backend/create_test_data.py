@@ -1,147 +1,539 @@
-#!/usr/bin/env python3
-"""
-Create test users for development
-Test o'quvchi, o'qituvchi va admin users
-"""
-
+import argparse
 import asyncio
+import json
+import random
 import sys
+import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from sqlalchemy import delete, func, select
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from app.core.config import settings
 from app.core.database import SessionLocal, init_db
 from app.core.security import hash_password
-from app.models.models import User, UserRole, StudentProfile, SupervisorProfile
-from sqlalchemy import select
+from app.models.models import (
+    AIAnalysis,
+    AuditLog,
+    DiplomaFile,
+    DiplomaStage,
+    DiplomaTopic,
+    Direction,
+    Faculty,
+    FileComment,
+    Group,
+    Kafedra,
+    Meeting,
+    MeetingAttendee,
+    MeetingStatus,
+    Message,
+    Notification,
+    NotificationType,
+    RiskAssessment,
+    StageStatus,
+    StudentProfile,
+    SupervisorProfile,
+    Task,
+    TopicStatus,
+    User,
+    UserRole,
+)
+
+FIRST_NAMES = [
+    "Aziz", "Jasur", "Temur", "Sardor", "Bekzod", "Diyor", "Shahzod", "Oybek", "Akmal", "Umar",
+    "Madina", "Aziza", "Dilnoza", "Shahnoza", "Nilufar", "Malika", "Nodira", "Zarina", "Gulnoza", "Sabina",
+]
+LAST_NAMES = [
+    "Karimov", "Rakhimov", "Aliyev", "Yuldashev", "Tursunov", "Saidov", "Abdullayev", "Nazarov", "Mamatov", "Islomov",
+    "Rasulova", "Qodirova", "Ergasheva", "Ortiqova", "Asqarova", "Hakimova", "Normatova", "Shermatova", "Hamroyeva", "Xolmatova",
+]
+
+TOPIC_TITLES = [
+    "Talabalar uchun adaptiv ta'lim monitoring platformasi",
+    "Diplom jarayonida risklarni bashoratlash uchun ML modul",
+    "Ilmiy rahbar va talaba o'rtasida aqlli kommunikatsiya tizimi",
+    "Hujjatlar sifatini baholash va avtomatik tavsiya tizimi",
+    "Bitiruv ishlarida progress analytics va dashboard",
+    "Universitet uchun raqamli ilmiy workflow arxitekturasi",
+    "Mavzu tanlash jarayonini optimallashtirish algoritmlari",
+    "Matn sifatini NLP asosida baholash va indikatorlash",
+    "Plagiat monitoring va hisobot generatsiyasi",
+    "Kafedra kesimida diplom ishlarida KPI monitoring",
+]
+
+STAGE_TEMPLATES = [
+    ("Mavzu tasdiqlash", 15.0),
+    ("Adabiyotlar tahlili", 20.0),
+    ("Amaliy qism", 30.0),
+    ("Natijalar va xulosa", 20.0),
+    ("Himoyaga tayyorlash", 15.0),
+]
 
 
-async def create_test_users():
-    """Create test users"""
-    print("🔧 Test users yaratilmoqda...\n")
+def _random_name() -> str:
+    return f"{random.choice(FIRST_NAMES)} {random.choice(LAST_NAMES)}"
 
-    await init_db()  # Init database
+
+def _slugify(full_name: str) -> str:
+    return "".join(ch.lower() for ch in full_name if ch.isalnum())
+
+
+def _pick_status() -> TopicStatus:
+    r = random.random()
+    if r < 0.58:
+        return TopicStatus.APPROVED
+    if r < 0.82:
+        return TopicStatus.PENDING
+    if r < 0.94:
+        return TopicStatus.DRAFT
+    return TopicStatus.REJECTED
+
+
+def _risk_bucket(topic_status: TopicStatus) -> tuple[str, float, int]:
+    if topic_status == TopicStatus.REJECTED:
+        return "critical", random.uniform(0.80, 0.98), random.randint(8, 18)
+    if topic_status == TopicStatus.DRAFT:
+        return "medium", random.uniform(0.40, 0.68), random.randint(15, 55)
+    if topic_status == TopicStatus.PENDING:
+        return random.choice([("medium", random.uniform(0.40, 0.70), random.randint(25, 70)),
+                              ("high", random.uniform(0.70, 0.88), random.randint(20, 60))])
+    return random.choice([("low", random.uniform(0.08, 0.35), random.randint(65, 96)),
+                          ("medium", random.uniform(0.35, 0.62), random.randint(45, 82))])
+
+
+def _stage_statuses(topic_status: TopicStatus) -> list[StageStatus]:
+    if topic_status == TopicStatus.REJECTED:
+        return [StageStatus.APPROVED, StageStatus.SUBMITTED, StageStatus.REJECTED, StageStatus.NOT_STARTED, StageStatus.NOT_STARTED]
+    if topic_status == TopicStatus.DRAFT:
+        return [StageStatus.IN_PROGRESS, StageStatus.NOT_STARTED, StageStatus.NOT_STARTED, StageStatus.NOT_STARTED, StageStatus.NOT_STARTED]
+    if topic_status == TopicStatus.PENDING:
+        return [StageStatus.APPROVED, StageStatus.SUBMITTED, StageStatus.IN_PROGRESS, StageStatus.NOT_STARTED, StageStatus.NOT_STARTED]
+    approved_count = random.randint(2, 5)
+    statuses = [StageStatus.APPROVED] * approved_count + [StageStatus.IN_PROGRESS] + [StageStatus.NOT_STARTED] * 5
+    return statuses[:5]
+
+
+def _write_upload_file(upload_dir: Path, topic_id: int, stage_order: int | None, ext: str, content: str) -> tuple[str, int, str]:
+    fname = f"{uuid.uuid4().hex}.{ext}"
+    full_path = upload_dir / fname
+    full_path.write_text(content, encoding="utf-8")
+    display = f"{100000 + topic_id}_{'topic' if stage_order is None else f'stage{stage_order}'}.{ext}"
+    return fname, full_path.stat().st_size, display
+
+
+async def _reset_all(session):
+    """Clear existing domain data in dependency-safe order."""
+    for model in [
+        AuditLog,
+        Message,
+        Notification,
+        MeetingAttendee,
+        Meeting,
+        FileComment,
+        DiplomaFile,
+        DiplomaStage,
+        Task,
+        AIAnalysis,
+        RiskAssessment,
+        DiplomaTopic,
+        StudentProfile,
+        SupervisorProfile,
+        User,
+        Group,
+        Direction,
+        Kafedra,
+        Faculty,
+    ]:
+        await session.execute(delete(model))
+    await session.commit()
+
+
+async def create_realistic_data(
+    students_kafedra_1: int = 42,
+    students_kafedra_2: int = 45,
+    supervisors_per_kafedra: int = 8,
+    reset: bool = False,
+    force: bool = False,
+) -> None:
+    random.seed(42)
+    print("[seed] Initializing database...")
+    await init_db()
+
+    upload_dir = Path(settings.UPLOAD_DIR)
+    upload_dir.mkdir(parents=True, exist_ok=True)
 
     async with SessionLocal() as session:
-        # Check existing users
-        result = await session.execute(select(User).where(User.role == UserRole.STUDENT))
-        if result.scalar_one_or_none():
-            print("⚠️  Test users allaqachon mavjud. Qaytish.")
+        existing_users = (await session.execute(select(func.count(User.id)))).scalar_one()
+        if existing_users and not (reset or force):
+            print(
+                f"[seed] Found {existing_users} existing users. "
+                "Use --reset to recreate or --force to append."
+            )
             return
 
-        # 1. Admin User
+        if reset:
+            print("[seed] Resetting current data...")
+            await _reset_all(session)
+
+        print("[seed] Creating organization structure...")
+        faculty = Faculty(name="Axborot texnologiyalari fakulteti", short_name="ATF")
+        session.add(faculty)
+        await session.flush()
+
+        kafedra_defs = [
+            ("Dasturiy injiniring", "DI", students_kafedra_1),
+            ("Sun'iy intellekt va data analytics", "SI", students_kafedra_2),
+        ]
+
+        kafedras: list[Kafedra] = []
+        groups_by_kafedra: dict[int, list[Group]] = {}
+        for idx, (k_name, k_short, _) in enumerate(kafedra_defs, start=1):
+            kaf = Kafedra(name=k_name, short_name=k_short, faculty_id=faculty.id)
+            session.add(kaf)
+            await session.flush()
+            kafedras.append(kaf)
+
+            direction = Direction(
+                name=f"{k_name} yo'nalishi",
+                code=f"{idx:02d}01",
+                kafedra_id=kaf.id,
+            )
+            session.add(direction)
+            await session.flush()
+
+            g1 = Group(name=f"{k_short}-401", year=2024, direction_id=direction.id)
+            g2 = Group(name=f"{k_short}-402", year=2024, direction_id=direction.id)
+            session.add_all([g1, g2])
+            await session.flush()
+            groups_by_kafedra[kaf.id] = [g1, g2]
+
+        print("[seed] Creating users (admin, heads, supervisors, students)...")
+        default_password = "Test12345!"
+        users_created = 0
+
         admin = User(
-            full_name="Admin Foydalanuvchi",
+            full_name="Bosh Administrator",
             email="admin@diplom.uz",
-            password_hash=hash_password("admin123"),
+            phone="+998901111111",
+            password_hash=hash_password(default_password),
             role=UserRole.ADMIN,
             is_active=True,
         )
         session.add(admin)
-        print("✅ Admin created: admin@diplom.uz / admin123")
+        await session.flush()
+        users_created += 1
 
-        # 2. Kafedra Head
-        kafedra_head = User(
-            full_name="Kafedra Mudiri",
-            email="kafedra@diplom.uz",
-            password_hash=hash_password("kafedra123"),
-            role=UserRole.KAFEDRA_HEAD,
-            is_active=True,
-        )
-        session.add(kafedra_head)
-        print("✅ Kafedra Head created: kafedra@diplom.uz / kafedra123")
-
-        # 3. Supervisors
-        supervisors = [
-            {
-                "name": "Prof. Abdullayev",
-                "email": "supervisor1@diplom.uz",
-                "password": "supervisor123",
-                "rank": "Professor"
-            },
-            {
-                "name": "Doc. Karimova",
-                "email": "supervisor2@diplom.uz",
-                "password": "supervisor456",
-                "rank": "Docent"
-            },
-            {
-                "name": "Doc. Sharifov",
-                "email": "supervisor3@diplom.uz",
-                "password": "supervisor789",
-                "rank": "Docent"
-            },
-        ]
-
-        for sup_data in supervisors:
-            sup = User(
-                full_name=sup_data["name"],
-                email=sup_data["email"],
-                password_hash=hash_password(sup_data["password"]),
-                role=UserRole.SUPERVISOR,
+        heads: list[User] = []
+        for idx, kaf in enumerate(kafedras, start=1):
+            head = User(
+                full_name=f"{_random_name()}",
+                email=f"kafedra.head{idx}@diplom.uz",
+                phone=f"+99890{idx}23456{idx}",
+                password_hash=hash_password(default_password),
+                role=UserRole.KAFEDRA_HEAD,
                 is_active=True,
+                kafedra_id=kaf.id,
             )
-            session.add(sup)
-            await session.flush()
+            session.add(head)
+            heads.append(head)
+            users_created += 1
 
-            # Create supervisor profile
-            sup_profile = SupervisorProfile(
-                user_id=sup.id,
-                academic_rank=sup_data["rank"],
-                max_students=5
-            )
-            session.add(sup_profile)
-            print(f"✅ Supervisor created: {sup_data['email']} / {sup_data['password']}")
+        supervisor_profiles_by_kafedra: dict[int, list[SupervisorProfile]] = {k.id: [] for k in kafedras}
+        supervisor_users_by_kafedra: dict[int, list[User]] = {k.id: [] for k in kafedras}
+        for idx, kaf in enumerate(kafedras, start=1):
+            for s in range(supervisors_per_kafedra):
+                name = _random_name()
+                email = f"sup.{idx}.{s+1}@diplom.uz"
+                sup_user = User(
+                    full_name=name,
+                    email=email,
+                    phone=f"+99893{idx}{s:02d}7788",
+                    password_hash=hash_password(default_password),
+                    role=UserRole.SUPERVISOR,
+                    is_active=True,
+                    kafedra_id=kaf.id,
+                )
+                session.add(sup_user)
+                await session.flush()
 
-        # 4. Students (5 ta)
-        students = [
-            {"name": "Olimov Alisher", "email": "student01@diplom.uz", "password": "student123", "id": "STU001"},
-            {"name": "Kobilov Karim", "email": "student02@diplom.uz", "password": "student456", "id": "STU002"},
-            {"name": "Normatova Nozima", "email": "student03@diplom.uz", "password": "student789", "id": "STU003"},
-            {"name": "Rahimova Rayhona", "email": "student04@diplom.uz", "password": "student101", "id": "STU004"},
-            {"name": "Sobirjonov Sobir", "email": "student05@diplom.uz", "password": "student202", "id": "STU005"},
-        ]
+                sup_profile = SupervisorProfile(
+                    user_id=sup_user.id,
+                    academic_rank=random.choice(["Assistant", "Senior Lecturer", "Docent", "Professor"]),
+                    max_students=max(8, int((students_kafedra_1 + students_kafedra_2) / (2 * supervisors_per_kafedra)) + 3),
+                )
+                session.add(sup_profile)
+                await session.flush()
+                supervisor_profiles_by_kafedra[kaf.id].append(sup_profile)
+                supervisor_users_by_kafedra[kaf.id].append(sup_user)
+                users_created += 1
 
-        for std_data in students:
-            std = User(
-                full_name=std_data["name"],
-                email=std_data["email"],
-                password_hash=hash_password(std_data["password"]),
-                role=UserRole.STUDENT,
-                is_active=True,
-            )
-            session.add(std)
-            await session.flush()
+        students_by_kafedra: dict[int, list[tuple[User, StudentProfile]]] = {k.id: [] for k in kafedras}
+        student_seq = 1
+        for kaf, (_, _, student_count) in zip(kafedras, kafedra_defs):
+            groups = groups_by_kafedra[kaf.id]
+            for s in range(student_count):
+                name = _random_name()
+                email = f"student.{kaf.short_name.lower()}.{s+1}@diplom.uz"
+                user = User(
+                    full_name=name,
+                    email=email,
+                    phone=f"+99895{kaf.id}{s:03d}22",
+                    password_hash=hash_password(default_password),
+                    role=UserRole.STUDENT,
+                    is_active=True,
+                    kafedra_id=kaf.id,
+                )
+                session.add(user)
+                await session.flush()
 
-            # Create student profile
-            std_profile = StudentProfile(
-                user_id=std.id,
-                student_id=std_data["id"],
-                group_id=1
-            )
-            session.add(std_profile)
-            print(f"✅ Student created: {std_data['email']} / {std_data['password']}")
+                profile = StudentProfile(
+                    user_id=user.id,
+                    group_id=groups[s % len(groups)].id,
+                    student_id=f"STU{student_seq:04d}",
+                    course=4,
+                )
+                session.add(profile)
+                students_by_kafedra[kaf.id].append((user, profile))
+                users_created += 1
+                student_seq += 1
+
+        await session.flush()
+        print(f"[seed] Users created: {users_created}")
+
+        print("[seed] Creating topics, stages, tasks, meetings, files, analyses...")
+        topic_count = 0
+        file_count = 0
+        message_count = 0
+        notification_count = 0
+
+        now = datetime.now(timezone.utc)
+        academic_year = "2025/2026"
+
+        for kaf in kafedras:
+            students = students_by_kafedra[kaf.id]
+            sup_profiles = supervisor_profiles_by_kafedra[kaf.id]
+            sup_users = supervisor_users_by_kafedra[kaf.id]
+
+            for idx, (student_user, student_profile) in enumerate(students):
+                sup_profile = sup_profiles[idx % len(sup_profiles)]
+                sup_user = sup_users[idx % len(sup_users)]
+                topic_status = _pick_status()
+                risk_level, risk_score, progress = _risk_bucket(topic_status)
+
+                created_at = now - timedelta(days=random.randint(20, 180))
+                defense_date = created_at + timedelta(days=random.randint(120, 260))
+
+                topic = DiplomaTopic(
+                    title=f"{random.choice(TOPIC_TITLES)} #{idx + 1}",
+                    title_en="Diploma research project",
+                    description="Realistik demo ma'lumotlar asosida yaratilgan diplom mavzusi.",
+                    status=topic_status,
+                    academic_year=academic_year,
+                    progress=float(progress),
+                    student_id=student_profile.id,
+                    supervisor_id=sup_profile.id,
+                    reviewer_id=random.choice(heads).id,
+                    reject_reason="Tadqiqot maqsadi aniq emas" if topic_status == TopicStatus.REJECTED else None,
+                    approved_at=created_at + timedelta(days=10) if topic_status == TopicStatus.APPROVED else None,
+                    defense_date=defense_date,
+                    is_template=False,
+                    created_by_id=random.choice(heads).id,
+                    created_at=created_at,
+                    updated_at=now - timedelta(days=random.randint(0, 7)),
+                )
+                session.add(topic)
+                await session.flush()
+                topic_count += 1
+
+                stage_statuses = _stage_statuses(topic_status)
+                stages: list[DiplomaStage] = []
+                for order, ((stage_name, weight), st_status) in enumerate(zip(STAGE_TEMPLATES, stage_statuses), start=1):
+                    deadline = created_at + timedelta(days=order * 30)
+                    stage = DiplomaStage(
+                        topic_id=topic.id,
+                        name=stage_name,
+                        description=f"{stage_name} bo'yicha ishlar",
+                        order=order,
+                        status=st_status,
+                        weight=weight,
+                        deadline=deadline,
+                        submitted_at=deadline - timedelta(days=random.randint(1, 6)) if st_status in (StageStatus.SUBMITTED, StageStatus.APPROVED, StageStatus.REJECTED) else None,
+                        reviewed_at=deadline - timedelta(days=random.randint(0, 2)) if st_status in (StageStatus.APPROVED, StageStatus.REJECTED) else None,
+                        comment="Qayta ishlab chiqing" if st_status == StageStatus.REJECTED else None,
+                        created_at=created_at,
+                    )
+                    session.add(stage)
+                    stages.append(stage)
+
+                for t in range(random.randint(4, 8)):
+                    done = random.random() < (0.70 if topic_status == TopicStatus.APPROVED else 0.35)
+                    task = Task(
+                        topic_id=topic.id,
+                        created_by=sup_user.id,
+                        title=f"Vazifa #{t+1}: {random.choice(['hisobot', 'kod', 'tahlil', 'test'])}",
+                        description="Nazorat uchun topshiriq.",
+                        deadline=created_at + timedelta(days=20 + t * 8),
+                        is_done=done,
+                        done_at=created_at + timedelta(days=18 + t * 8) if done else None,
+                        created_at=created_at,
+                    )
+                    session.add(task)
+
+                for m in range(random.randint(1, 4)):
+                    mt_status = random.choice([MeetingStatus.PLANNED, MeetingStatus.COMPLETED, MeetingStatus.CANCELLED])
+                    meeting_time = now + timedelta(days=random.randint(-20, 25), hours=random.randint(8, 17))
+                    meeting = Meeting(
+                        title=f"Progress uchrashuv #{m+1}",
+                        reason="Diplom mavzusi bo'yicha holatni ko'rib chiqish",
+                        topic_id=topic.id,
+                        scheduled_at=meeting_time,
+                        duration_min=random.choice([30, 45, 60]),
+                        location=random.choice(["Zoom", "Google Meet", "Kafedra 204-xona"]),
+                        status=mt_status,
+                        notes="Muhokama qilindi" if mt_status == MeetingStatus.COMPLETED else None,
+                        created_by=sup_user.id,
+                        created_at=created_at,
+                    )
+                    session.add(meeting)
+                    await session.flush()
+                    session.add(MeetingAttendee(meeting_id=meeting.id, user_id=student_user.id))
+                    session.add(MeetingAttendee(meeting_id=meeting.id, user_id=sup_user.id))
+
+                await session.flush()
+
+                stage_for_file = random.choice(stages)
+                exts = ["pdf", "docx", "txt"]
+                for fidx in range(random.randint(2, 4)):
+                    ext = random.choice(exts)
+                    body = (
+                        f"Mavzu: {topic.title}\n"
+                        f"Talaba: {student_user.full_name}\n"
+                        f"Rahbar: {sup_user.full_name}\n"
+                        f"Bosqich: {stages[min(fidx, len(stages)-1)].name}\n"
+                        "Bu fayl test maqsadida avtomatik yaratildi."
+                    )
+                    stage_link = stage_for_file.id if fidx == 0 else None
+                    stage_order = stage_for_file.order if fidx == 0 else None
+                    stored_name, fsize, display_name = _write_upload_file(upload_dir, topic.id, stage_order, ext, body)
+                    dfile = DiplomaFile(
+                        topic_id=topic.id,
+                        stage_id=stage_link,
+                        uploaded_by=student_user.id,
+                        file_name=display_name,
+                        file_path=stored_name,
+                        file_size=fsize,
+                        file_type=ext,
+                        version=fidx + 1,
+                        is_final=fidx == 0 and topic_status == TopicStatus.APPROVED,
+                        plagiat_score=round(random.uniform(4, 28), 2),
+                        created_at=created_at + timedelta(days=7 + fidx),
+                    )
+                    session.add(dfile)
+                    file_count += 1
+
+                session.add(AIAnalysis(
+                    topic_id=topic.id,
+                    analysis_type="text_quality",
+                    score=round(random.uniform(62, 96), 2),
+                    result=json.dumps({
+                        "clarity": round(random.uniform(0.60, 0.96), 2),
+                        "structure": round(random.uniform(0.58, 0.95), 2),
+                        "terminology": round(random.uniform(0.55, 0.93), 2),
+                    }),
+                    created_at=now - timedelta(days=random.randint(1, 10)),
+                ))
+                session.add(AIAnalysis(
+                    topic_id=topic.id,
+                    analysis_type="plagiarism",
+                    score=round(random.uniform(3, 24), 2),
+                    result=json.dumps({"similarity_percent": round(random.uniform(3, 24), 2)}),
+                    created_at=now - timedelta(days=random.randint(1, 10)),
+                ))
+
+                session.add(RiskAssessment(
+                    topic_id=topic.id,
+                    risk_score=risk_score,
+                    risk_level=risk_level,
+                    factors=json.dumps({
+                        "progress_gap": round(random.uniform(0, 35), 2),
+                        "task_completion_rate": round(random.uniform(0.2, 1.0), 2),
+                        "meeting_frequency": round(random.uniform(0.1, 1.0), 2),
+                    }),
+                    recommendation="Haftalik nazoratni kuchaytirish" if risk_level in {"high", "critical"} else "Reja asosida davom etish",
+                    assessed_at=now - timedelta(days=random.randint(0, 5)),
+                ))
+
+                for mi in range(random.randint(2, 5)):
+                    session.add(Message(
+                        sender_id=student_user.id if mi % 2 == 0 else sup_user.id,
+                        receiver_id=sup_user.id if mi % 2 == 0 else student_user.id,
+                        topic_id=topic.id,
+                        content=random.choice([
+                            "Ustoz, bugungi natijalar tayyor.",
+                            "Ilova bo'limini qayta ko'rib chiqdim.",
+                            "Deadline bo'yicha savolim bor.",
+                            "Himoya slaydlarini yangiladim.",
+                        ]),
+                        is_read=mi % 3 != 0,
+                        created_at=now - timedelta(days=random.randint(0, 14)),
+                    ))
+                    message_count += 1
+
+                for noti_user_id, title, body in [
+                    (student_user.id, "Yangi topshiriq", "Rahbar tomonidan yangi topshiriq qo'shildi"),
+                    (sup_user.id, "Talaba fayl yukladi", "Talaba yangi fayl yubordi"),
+                ]:
+                    session.add(Notification(
+                        user_id=noti_user_id,
+                        type=NotificationType.NEW_TASK,
+                        title=title,
+                        body=body,
+                        is_read=False,
+                        sent_to_tg=random.random() < 0.5,
+                        created_at=now - timedelta(hours=random.randint(1, 72)),
+                    ))
+                    notification_count += 1
+
+                if topic_count % 20 == 0:
+                    await session.commit()
+                    print(f"[seed] Progress: {topic_count} topics committed...")
 
         await session.commit()
 
-        print("\n" + "="*60)
-        print("✨ BARCHA TEST USERS MUVAFFAQIYATLI YARATILDI!")
-        print("="*60)
-        print("\n📋 Test credentials:\n")
-        print("ADMIN:")
-        print("  Email: admin@diplom.uz")
-        print("  Password: admin123\n")
-        print("KAFEDRA MUDIRI:")
-        print("  Email: kafedra@diplom.uz")
-        print("  Password: kafedra123\n")
-        print("SUPERVISORS:")
-        for sup in supervisors:
-            print(f"  {sup['email']} / {sup['password']}")
-        print("\nSTUDENTS:")
-        for std in students:
-            print(f"  {std['email']} / {std['password']}")
+        print("\n[seed] COMPLETED")
+        print(f"  users_total_created: {users_created}")
+        print(f"  topics: {topic_count}")
+        print(f"  files: {file_count}")
+        print(f"  messages: {message_count}")
+        print(f"  notifications: {notification_count}")
+        print(f"  upload_dir: {upload_dir}")
+        print("  default_password: Test12345!")
+        print("  admin_login: admin@diplom.uz")
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Create realistic test data for Diplom Monitoring")
+    parser.add_argument("--students-k1", type=int, default=42, help="Students for kafedra #1")
+    parser.add_argument("--students-k2", type=int, default=45, help="Students for kafedra #2")
+    parser.add_argument("--supervisors-per-kafedra", type=int, default=8, help="Supervisors per kafedra")
+    parser.add_argument("--reset", action="store_true", help="Delete existing domain data before seeding")
+    parser.add_argument("--force", action="store_true", help="Append data even if users already exist")
+    return parser.parse_args()
+
+
+async def _main() -> None:
+    args = _parse_args()
+    await create_realistic_data(
+        students_kafedra_1=args.students_k1,
+        students_kafedra_2=args.students_k2,
+        supervisors_per_kafedra=args.supervisors_per_kafedra,
+        reset=args.reset,
+        force=args.force,
+    )
 
 
 if __name__ == "__main__":
-    asyncio.run(create_test_users())
+    asyncio.run(_main())
 
