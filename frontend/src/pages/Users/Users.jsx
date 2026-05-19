@@ -31,14 +31,50 @@ function RoleBadge({ role }) {
 }
 
 function AddUserModal({ onClose, onSuccess }) {
-  const [form, setForm] = useState({ full_name: '', email: '', password: '', role: 'student' })
+  const [form, setForm] = useState({ full_name: '', email: '', password: '', role: 'student', kafedra_id: '', group_id: '', student_id: '', academic_rank: '' })
   const [saving, setSaving] = useState(false)
+  const [kafedras, setKafedras] = useState([])
+  const [groups, setGroups] = useState([])
+  const [loadingData, setLoadingData] = useState(true)
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [kafRes, grRes] = await Promise.all([usersApi.kafedras(), usersApi.groups()])
+        setKafedras(kafRes.data)
+        setGroups(grRes.data)
+      } catch { toast.error("Ma'lumot yuklanmadi") }
+      finally { setLoadingData(false) }
+    }
+    loadData()
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
+    // Validation
+    if (form.role === 'student' && !form.kafedra_id) {
+      toast.error("Talabalar uchun kafedra tanlang")
+      return
+    }
+    if (form.role === 'supervisor' && !form.academic_rank) {
+      toast.error("Supervisor uchun unvonini tanlang")
+      return
+    }
+
     setSaving(true)
     try {
-      await usersApi.create(form)
+      const data = {
+        full_name: form.full_name,
+        email: form.email,
+        password: form.password,
+        role: form.role,
+        kafedra_id: form.kafedra_id ? parseInt(form.kafedra_id) : null,
+        group_id: form.group_id ? parseInt(form.group_id) : null,
+        student_id: form.student_id || null,
+        academic_rank: form.academic_rank || null,
+      }
+      await usersApi.create(data)
       toast.success("Foydalanuvchi yaratildi")
       onSuccess()
       onClose()
@@ -51,7 +87,7 @@ function AddUserModal({ onClose, onSuccess }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-      <div style={{ background: '#fff', borderRadius: '20px', padding: '32px', width: '460px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+      <div style={{ background: '#fff', borderRadius: '20px', padding: '32px', width: '500px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b', fontFamily: "'Sora',sans-serif" }}>Yangi foydalanuvchi</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px' }}><X size={20} /></button>
@@ -73,21 +109,61 @@ function AddUserModal({ onClose, onSuccess }) {
               placeholder="Kamida 8 belgi" required minLength={8} />
           </div>
           <div>
-            <label style={S.label}>Rol</label>
-            <select style={{ ...S.input, cursor: 'pointer' }} value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+            <label style={S.label}>Rol <span style={{ color: '#ef4444' }}>*</span></label>
+            <select style={{ ...S.input, cursor: 'pointer' }} value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value, kafedra_id: '', group_id: '', student_id: '', academic_rank: '' }))}>
               <option value="student">Talaba</option>
               <option value="supervisor">Ilmiy rahbar</option>
               <option value="kafedra_head">Kafedra boshlig'i</option>
               <option value="admin">Admin</option>
             </select>
           </div>
+
+          {form.role === 'student' && (
+            <>
+              <div>
+                <label style={S.label}>Kafedra <span style={{ color: '#ef4444' }}>*</span></label>
+                <select style={{ ...S.input, cursor: 'pointer' }} value={form.kafedra_id} onChange={e => setForm(f => ({ ...f, kafedra_id: e.target.value }))} required>
+                  <option value="">Kafedra tanlang</option>
+                  {kafedras.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={S.label}>Guruh</label>
+                <select style={{ ...S.input, cursor: 'pointer' }} value={form.group_id} onChange={e => setForm(f => ({ ...f, group_id: e.target.value }))}>
+                  <option value="">Guruh tanlang (ixtiyoriy)</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={S.label}>Talaba ID</label>
+                <input style={S.input} value={form.student_id} onChange={e => setForm(f => ({ ...f, student_id: e.target.value }))}
+                  placeholder="12345 (ixtiyoriy)" />
+              </div>
+            </>
+          )}
+
+          {form.role === 'supervisor' && (
+            <>
+              <div>
+                <label style={S.label}>Unvon <span style={{ color: '#ef4444' }}>*</span></label>
+                <select style={{ ...S.input, cursor: 'pointer' }} value={form.academic_rank} onChange={e => setForm(f => ({ ...f, academic_rank: e.target.value }))} required>
+                  <option value="">Unvonni tanlang</option>
+                  <option value="Professor">Professor</option>
+                  <option value="Dotsent">Dotsent</option>
+                  <option value="Assistent">Assistent</option>
+                  <option value="Assistent-professor">Assistent-professor</option>
+                </select>
+              </div>
+            </>
+          )}
+
           <div style={{ display: 'flex', gap: '10px', paddingTop: '8px' }}>
             <button type="button" onClick={onClose}
               style={{ flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#475569' }}>
               Bekor qilish
             </button>
-            <button type="submit" disabled={saving}
-              style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: saving ? '#a5b4fc' : '#6366f1', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}>
+            <button type="submit" disabled={saving || loadingData}
+              style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: saving || loadingData ? '#a5b4fc' : '#6366f1', color: '#fff', cursor: saving || loadingData ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}>
               {saving ? 'Saqlanmoqda...' : 'Yaratish'}
             </button>
           </div>

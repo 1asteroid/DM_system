@@ -5,8 +5,8 @@ from sqlalchemy.orm import selectinload
 
 from ..core.database import get_db
 from ..core.dependencies import get_current_user
-from ..models.models import User, UserRole, SupervisorProfile, StudentProfile, DiplomaTopic, TopicStatus, DiplomaStage, StageStatus
-from ..schemas.schemas import UserResponse, SupervisorStudentResponse, UserCreateRequest
+from ..models.models import User, UserRole, SupervisorProfile, StudentProfile, DiplomaTopic, TopicStatus, DiplomaStage, StageStatus, Kafedra, Group
+from ..schemas.schemas import UserResponse, SupervisorStudentResponse, UserCreateRequest, KafedraResponse, GroupResponse
 from ..services.services import AuthService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -179,3 +179,35 @@ async def deactivate_user(
     user.is_active = False
     await db.commit()
     return UserResponse.model_validate(user)
+
+
+# ═════════════════════════════════════════════════════
+# KAFEDRA & GROUP ENDPOINTS (for admin user creation)
+# ═════════════════════════════════════════════════════
+
+@router.get("/admin/kafedras", response_model=list[KafedraResponse])
+async def get_kafedras(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all kafedras (for admin panel)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Faqat adminlar kafedra ro'yxatini ko'ra oladi")
+    
+    result = await db.execute(select(Kafedra).order_by(Kafedra.name))
+    kafedras = result.scalars().all()
+    return [KafedraResponse.model_validate(k) for k in kafedras]
+
+
+@router.get("/admin/groups", response_model=list[GroupResponse])
+async def get_groups(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all groups (for admin panel)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Faqat adminlar guruh ro'yxatini ko'ra oladi")
+    
+    result = await db.execute(select(Group).order_by(Group.name))
+    groups = result.scalars().all()
+    return [GroupResponse.model_validate(g) for g in groups]

@@ -111,6 +111,25 @@ class TokenResponse(BaseModel):
 
 
 # ═══════════════════════════════════════════════
+# KAFEDRA & GROUP SCHEMAS
+# ═══════════════════════════════════════════════
+
+class KafedraResponse(BaseModel):
+    id: int
+    name: str
+    short_name: str | None = None
+    model_config = {"from_attributes": True}
+
+
+class GroupResponse(BaseModel):
+    id: int
+    name: str
+    year: int | None = None
+    direction_id: int | None = None
+    model_config = {"from_attributes": True}
+
+
+# ═══════════════════════════════════════════════
 # TOPIC SCHEMAS
 # ═══════════════════════════════════════════════
 

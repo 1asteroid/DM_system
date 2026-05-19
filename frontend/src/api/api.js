@@ -157,6 +157,9 @@ export const usersApi = {
   mySupervisor: () => api.get('/users/my-supervisor'),
   create: (data) => api.post('/users', data),
   deactivate: (id) => api.patch(`/users/${id}/deactivate`),
+  // Admin endpoints
+  kafedras: () => api.get('/users/admin/kafedras'),
+  groups: () => api.get('/users/admin/groups'),
 }
 
 export default api
