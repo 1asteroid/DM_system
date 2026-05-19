@@ -508,6 +508,9 @@ async def create_realistic_data(
 
                 await session.flush()
 
+                # File extensions to use
+                exts = ["pdf", "docx", "txt"]
+
                 # ===== SUPERVISOR PROVIDED FILES (stage'siz, umumiy adabiyotlar/qo'llanmalar) =====
                 # Supervisor faqat bir marta umumiy fayllarni qo'shadi (topic level, hamma stage uchun)
                 # 5-6 ta adabiyot/qo'llanma
