@@ -40,7 +40,7 @@ from ..schemas.schemas import (
     DashboardStats, FileCommentCreate,
     FileResponse, GroupMessageCreate, SupervisorGroupMessageCreate, LoginRequest, MeetingCreateRequest, MeetingResponse,
     MeetingUpdateRequest, MessageCreateRequest, MessageResponse,
-    NotificationResponse, RefreshRequest, RegisterRequest,
+    NotificationResponse, RefreshRequest, RegisterRequest, UserCreateRequest,
     RiskAssessmentResponse, RiskListItem,
     StageCreateRequest, StageReviewRequest, StageUpdateRequest,
     TaskCreateRequest, TaskResponse, TaskUpdateRequest, TextAnalysisRequest,
@@ -112,6 +112,7 @@ class AuthService:
             email=user.email,
             role=user.role,
             is_active=user.is_active,
+            kafedra_id=user.kafedra_id,
             telegram_id=user.telegram_id,
             avatar_url=user.avatar_url,
             group_id=student.group_id if student else None,
@@ -148,6 +149,48 @@ class AuthService:
         await db.flush()
         user = await self._load_user_for_response(user.id, db)
         return self._tokens(user)
+
+    async def create_user(self, data: "UserCreateRequest", admin_user: User, db: AsyncSession) -> UserResponse:
+        """Admin tomonidan yangi user yaratish"""
+        if admin_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Faqat adminlar user yarata oladi")
+        
+        res = await db.execute(select(User).where(User.email == data.email))
+        if res.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Bu email allaqachon ro'yxatdan o'tgan")
+        
+        # Talabalar uchun kafedra_id majburiy
+        if data.role == UserRole.STUDENT and not data.kafedra_id:
+            raise HTTPException(status_code=400, detail="Talabalar uchun kafedra ko'rsatilishi kerak")
+        
+        user = User(
+            full_name=data.full_name,
+            email=data.email,
+            password_hash=hash_password(data.password),
+            role=data.role,
+            kafedra_id=data.kafedra_id,
+        )
+        db.add(user)
+        await db.flush()
+        
+        # Rolga qarab profil avtomatik yaratiladi
+        if data.role == UserRole.STUDENT:
+            profile = StudentProfile(
+                user_id=user.id,
+                group_id=data.group_id,
+                student_id=data.student_id
+            )
+            db.add(profile)
+        elif data.role == UserRole.SUPERVISOR:
+            profile = SupervisorProfile(
+                user_id=user.id,
+                academic_rank=data.academic_rank
+            )
+            db.add(profile)
+        
+        await db.commit()
+        user = await self._load_user_for_response(user.id, db)
+        return self._user_response(user)
 
     async def login(self, data: LoginRequest, db: AsyncSession) -> TokenResponse:
         res = await db.execute(select(User).where(User.email == data.email))
@@ -298,6 +341,8 @@ class TopicService:
 
     async def get_list(self, user: User, db: AsyncSession,
                        page=1, page_size=20, status=None, search=None) -> TopicListResponse:
+        from sqlalchemy.orm import joinedload
+        
         q = select(DiplomaTopic)
         if user.role == UserRole.STUDENT:
             if not user.student_profile:
@@ -310,6 +355,12 @@ class TopicService:
                 DiplomaTopic.supervisor_id == user.supervisor_profile.id,
                 DiplomaTopic.status == TopicStatus.APPROVED,
             )
+        elif user.role == UserRole.KAFEDRA_HEAD:
+            # Kafedra head sees topics of students in their kafedra only
+            from ..models.models import StudentProfile as SP
+            q = q.join(SP, DiplomaTopic.student_id == SP.id).join(
+                User, SP.user_id == User.id
+            ).where(User.kafedra_id == user.kafedra_id)
         if status:
             q = q.where(DiplomaTopic.status == status)
         if search:
@@ -619,7 +670,14 @@ class TopicService:
         return topic
 
     def _check_access(self, topic, user):
-        if user.role in (UserRole.ADMIN, UserRole.KAFEDRA_HEAD):
+        if user.role == UserRole.ADMIN:
+            return
+        if user.role == UserRole.KAFEDRA_HEAD:
+            # Kafedra head can access topics of their kafedra's students only
+            if not user.kafedra_id:
+                raise HTTPException(status_code=403, detail="Kafedra mudiriga kafedra ko'rsatilmagan")
+            if not topic.student or not topic.student.user or topic.student.user.kafedra_id != user.kafedra_id:
+                raise HTTPException(status_code=403, detail="Ruxsat yo'q")
             return
         if user.role == UserRole.STUDENT and (not user.student_profile or topic.student_id != user.student_profile.id):
             raise HTTPException(status_code=403, detail="Ruxsat yo'q")
@@ -809,6 +867,11 @@ class TopicService:
 class StageService:
     async def create(self, topic_id: int, data: StageCreateRequest, user: User, db: AsyncSession):
         topic = await self._get_topic(topic_id, db)
+        if topic.status != TopicStatus.APPROVED or not topic.supervisor_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Bosqich qo'shish uchun mavzu tasdiqlangan va ilmiy rahbar biriktirilgan bo'lishi kerak",
+            )
         # Faqat SUPERVISOR o'z o'quvchilari mavzulariga bosqich qo'sha oladi
         if user.role == UserRole.SUPERVISOR:
             if not user.supervisor_profile or topic.supervisor_id != user.supervisor_profile.id:
@@ -891,7 +954,30 @@ class StageService:
         return stage
 
     async def review(self, stage_id: int, data: StageReviewRequest, user: User, db: AsyncSession):
+        """Review and approve/reject stage (supervisor or kafedra head only)"""
+        # Only supervisors and kafedra heads can review stages
+        if user.role not in (UserRole.SUPERVISOR, UserRole.KAFEDRA_HEAD, UserRole.ADMIN):
+            raise HTTPException(status_code=403, detail="Faqat ilmiy rahbar yoki kafedra mudiri bosqichni ko'rib chiqishi mumkin")
+        
         stage = await self._get_or_404(stage_id, db)
+        
+        # Get topic to check authorization
+        topic_res = await db.execute(select(DiplomaTopic).where(DiplomaTopic.id == stage.topic_id))
+        topic = topic_res.scalar_one_or_none()
+        if not topic:
+            raise HTTPException(status_code=404, detail="Mavzu topilmadi")
+        
+        # Check authorization
+        if user.role == UserRole.SUPERVISOR:
+            if not user.supervisor_profile or topic.supervisor_id != user.supervisor_profile.id:
+                raise HTTPException(status_code=403, detail="Ruxsat yo'q")
+        elif user.role == UserRole.KAFEDRA_HEAD:
+            # Kafedra head can review stages for topics of their kafedra's students only
+            if not user.kafedra_id:
+                raise HTTPException(status_code=403, detail="Kafedra mudiriga kafedra ko'rsatilmagan")
+            if not topic.student or not topic.student.user or topic.student.user.kafedra_id != user.kafedra_id:
+                raise HTTPException(status_code=403, detail="Ruxsat yo'q")
+        
         stage.status = StageStatus.APPROVED if data.approved else StageStatus.REJECTED
         stage.reviewed_at = datetime.now(timezone.utc)
         stage.comment = data.comment

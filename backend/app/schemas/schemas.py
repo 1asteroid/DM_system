@@ -26,6 +26,27 @@ class RegisterRequest(BaseModel):
         return v
 
 
+class UserCreateRequest(BaseModel):
+    """Admin tomonidan user yaratish uchun schema (kafedra_id bilan)"""
+    full_name: str = Field(..., min_length=2, max_length=200)
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    role: UserRole
+    kafedra_id: int | None = None
+    # Student fields
+    group_id: int | None = None
+    student_id: str | None = None
+    # Supervisor fields
+    academic_rank: str | None = None
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("Parol kamida 8 ta belgi bo'lishi kerak")
+        return v
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -55,6 +76,7 @@ class UserResponse(BaseModel):
     email: str
     role: UserRole
     is_active: bool
+    kafedra_id: int | None = None
     telegram_id: str | None = None
     avatar_url: str | None = None
     # Student info

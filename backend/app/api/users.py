@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -6,9 +6,24 @@ from sqlalchemy.orm import selectinload
 from ..core.database import get_db
 from ..core.dependencies import get_current_user
 from ..models.models import User, UserRole, SupervisorProfile, StudentProfile, DiplomaTopic, TopicStatus, DiplomaStage, StageStatus
-from ..schemas.schemas import UserResponse, SupervisorStudentResponse
+from ..schemas.schemas import UserResponse, SupervisorStudentResponse, UserCreateRequest
+from ..services.services import AuthService
 
 router = APIRouter(prefix="/users", tags=["users"])
+auth_service = AuthService()
+
+
+@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    data: UserCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create new user (admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Faqat adminlar user yarata oladi")
+    
+    return await auth_service.create_user(data, current_user, db)
 
 
 @router.get("", response_model=list[UserResponse])
