@@ -663,6 +663,11 @@ class TopicService:
         q = select(DiplomaTopic).where(DiplomaTopic.id == topic_id)
         if with_stages:
             q = q.options(selectinload(DiplomaTopic.stages))
+        # Always eagerly load student and supervisor for access control
+        q = q.options(
+            selectinload(DiplomaTopic.student).selectinload(StudentProfile.user),
+            selectinload(DiplomaTopic.supervisor).selectinload(SupervisorProfile.user)
+        )
         res = await db.execute(q)
         topic = res.scalar_one_or_none()
         if not topic:
