@@ -41,13 +41,21 @@ from app.models.models import (
     UserRole,
 )
 
-FIRST_NAMES = [
+MALE_FIRST_NAMES = [
     "Aziz", "Jasur", "Temur", "Sardor", "Bekzod", "Diyor", "Shahzod", "Oybek", "Akmal", "Umar",
-    "Madina", "Aziza", "Dilnoza", "Shahnoza", "Nilufar", "Malika", "Nodira", "Zarina", "Gulnoza", "Sabina",
+    "Ali", "Bakhrom", "Dilshod", "Farhod", "Habib", "Ismail", "Javohir", "Karim", "Lazar", "Muzaffar",
 ]
-LAST_NAMES = [
+FEMALE_FIRST_NAMES = [
+    "Madina", "Aziza", "Dilnoza", "Shahnoza", "Nilufar", "Malika", "Nodira", "Zarina", "Gulnoza", "Sabina",
+    "Amina", "Darina", "Elena", "Feroza", "Gulnar", "Hulkar", "Irina", "Julia", "Kamila", "Lydia",
+]
+MALE_LAST_NAMES = [
     "Karimov", "Rakhimov", "Aliyev", "Yuldashev", "Tursunov", "Saidov", "Abdullayev", "Nazarov", "Mamatov", "Islomov",
+    "Azimov", "Berdiyev", "Chotilov", "Dostiyev", "Ergashov", "Fayzullayev", "Gavlov", "Hushmandov", "Ikramov", "Jalilayev",
+]
+FEMALE_LAST_NAMES = [
     "Rasulova", "Qodirova", "Ergasheva", "Ortiqova", "Asqarova", "Hakimova", "Normatova", "Shermatova", "Hamroyeva", "Xolmatova",
+    "Azimova", "Berdiyeva", "Chotilyeva", "Dostiyeva", "Ergasheva", "Fayzullayeva", "Gavlova", "Hushmandova", "Ikramova", "Jalilayeva",
 ]
 
 TOPIC_TITLES = [
@@ -72,8 +80,16 @@ STAGE_TEMPLATES = [
 ]
 
 
-def _random_name() -> str:
-    return f"{random.choice(FIRST_NAMES)} {random.choice(LAST_NAMES)}"
+def _random_male_name() -> str:
+    return f"{random.choice(MALE_FIRST_NAMES)} {random.choice(MALE_LAST_NAMES)}"
+
+def _random_female_name() -> str:
+    return f"{random.choice(FEMALE_FIRST_NAMES)} {random.choice(FEMALE_LAST_NAMES)}"
+
+def _random_name(male: bool | None = None) -> str:
+    if male is None:
+        male = random.choice([True, False])
+    return _random_male_name() if male else _random_female_name()
 
 
 def _slugify(full_name: str) -> str:
@@ -115,11 +131,29 @@ def _stage_statuses(topic_status: TopicStatus) -> list[StageStatus]:
     return statuses[:5]
 
 
-def _write_upload_file(upload_dir: Path, topic_id: int, stage_order: int | None, ext: str, content: str) -> tuple[str, int, str]:
+def _write_upload_file(
+    upload_dir: Path,
+    topic_id: int,
+    stage_order: int | None,
+    ext: str,
+    content: str,
+    is_supervisor: bool = True,
+) -> tuple[str, int, str]:
+    """Create and save a file. 
+    
+    Args:
+        is_supervisor: True = supervisor provided file, False = student submitted file
+    """
     fname = f"{uuid.uuid4().hex}.{ext}"
     full_path = upload_dir / fname
     full_path.write_text(content, encoding="utf-8")
-    display = f"{100000 + topic_id}_{'topic' if stage_order is None else f'stage{stage_order}'}.{ext}"
+    
+    file_type_label = "supervisor" if is_supervisor else "student"
+    if stage_order:
+        display = f"{100000 + topic_id}_stage{stage_order}_{file_type_label}.{ext}"
+    else:
+        display = f"{100000 + topic_id}_topic_{file_type_label}.{ext}"
+    
     return fname, full_path.stat().st_size, display
 
 
@@ -165,7 +199,10 @@ async def create_realistic_data(
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     async with SessionLocal() as session:
-        existing_users = (await session.execute(select(func.count(User.id)))).scalar_one()
+        # ignore the demo user created by init_db() when deciding to early-exit
+        existing_users = (await session.execute(
+            select(func.count(User.id)).where(User.email != "student01@diplom.uz")
+        )).scalar_one()
         if existing_users and not (reset or force):
             print(
                 f"[seed] Found {existing_users} existing users. "
@@ -471,35 +508,66 @@ async def create_realistic_data(
 
                 await session.flush()
 
-                stage_for_file = random.choice(stages)
-                exts = ["pdf", "docx", "txt"]
-                for fidx in range(random.randint(2, 4)):
+                # ===== SUPERVISOR PROVIDED FILES (stage'siz, umumiy adabiyotlar/qo'llanmalar) =====
+                # Supervisor faqat bir marta umumiy fayllarni qo'shadi (topic level, hamma stage uchun)
+                # 5-6 ta adabiyot/qo'llanma
+                for sp_fidx in range(random.randint(5, 6)):
                     ext = random.choice(exts)
                     body = (
+                        f"[SUPERVISOR MATERIAL]\n"
                         f"Mavzu: {topic.title}\n"
-                        f"Talaba: {student_user.full_name}\n"
                         f"Rahbar: {assigned_sup_user.full_name}\n"
-                        f"Bosqich: {stages[min(fidx, len(stages)-1)].name}\n"
-                        "Bu fayl test maqsadida avtomatik yaratildi."
+                        f"Navi: {'Adabiyot' if sp_fidx == 0 else 'Qo\'llanma'} #{sp_fidx}\n"
+                        "Bu rahbar tarafidan talabaga butun diplom jarayoni uchun yuboriladigan material."
                     )
-                    stage_link = stage_for_file.id if fidx == 0 else None
-                    stage_order = stage_for_file.order if fidx == 0 else None
-                    stored_name, fsize, display_name = _write_upload_file(upload_dir, topic.id, stage_order, ext, body)
-                    dfile = DiplomaFile(
+                    stored_name, fsize, display_name = _write_upload_file(
+                        upload_dir, topic.id, None, ext, body, is_supervisor=True
+                    )
+                    session.add(DiplomaFile(
                         topic_id=topic.id,
-                        stage_id=stage_link,
-                        uploaded_by=student_user.id,
+                        stage_id=None,  # STAGE'GA BOG'LIQ EMAS - UMUMIY
+                        uploaded_by=assigned_sup_user.id,
                         file_name=display_name,
                         file_path=stored_name,
                         file_size=fsize,
                         file_type=ext,
-                        version=fidx + 1,
-                        is_final=fidx == 0 and topic_status == TopicStatus.APPROVED,
-                        plagiat_score=round(random.uniform(4, 28), 2),
-                        created_at=created_at + timedelta(days=7 + fidx),
-                    )
-                    session.add(dfile)
+                        version=1,
+                        is_final=False,
+                        plagiat_score=None,
+                        created_at=created_at + timedelta(days=2),
+                    ))
                     file_count += 1
+
+                # ===== STUDENT SUBMITTED FILES (har stage uchun o'z ishlarini) =====
+                for stage in stages:
+                    # Agar stage approved, submitted yoki in_progress bo'lsa, talaba fayl yuklagan deb aytamiz
+                    if stage.status in (StageStatus.APPROVED, StageStatus.SUBMITTED, StageStatus.IN_PROGRESS):
+                        # Talaba har stage uchun FAQAT BITTA fayl yuklaydi
+                        ext = random.choice(exts)
+                        body = (
+                            f"[STUDENT WORK]\n"
+                            f"Mavzu: {topic.title}\n"
+                            f"Bosqich: {stage.name}\n"
+                            f"Talaba: {student_user.full_name}\n"
+                            "Bu talaba tarafidan stage uchun yuklagan o'z ishlari."
+                        )
+                        stored_name, fsize, display_name = _write_upload_file(
+                            upload_dir, topic.id, stage.order, ext, body, is_supervisor=False
+                        )
+                        session.add(DiplomaFile(
+                            topic_id=topic.id,
+                            stage_id=stage.id,  # STAGE'GA BOG'LIQ
+                            uploaded_by=student_user.id,
+                            file_name=display_name,
+                            file_path=stored_name,
+                            file_size=fsize,
+                            file_type=ext,
+                            version=1,
+                            is_final=stage.status == StageStatus.APPROVED,
+                            plagiat_score=round(random.uniform(4, 28), 2) if stage.status == StageStatus.APPROVED else None,
+                            created_at=created_at + timedelta(days=stage.order * 20 + random.randint(1, 5)),
+                        ))
+                        file_count += 1
 
                 session.add(AIAnalysis(
                     topic_id=topic.id,

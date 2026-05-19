@@ -1185,16 +1185,58 @@ class FileService:
         return resp
 
     async def get_list(self, topic_id: int, db: AsyncSession) -> list[FileResponse]:
+        """Get topic-level supervisor files (stage_id IS NULL, uploaded_by IS supervisor)"""
+        # Supervisor user IDs'larini olish
+        sup_prof_res = await db.execute(select(SupervisorProfile))
+        supervisor_user_ids = {sp.user_id for sp in sup_prof_res.scalars().all()}
+
         res = await db.execute(
-            select(DiplomaFile).where(DiplomaFile.topic_id == topic_id)
+            select(DiplomaFile).where(
+                DiplomaFile.topic_id == topic_id,
+                DiplomaFile.stage_id == None  # TOPIC LEVEL FILES ONLY
+            )
             .order_by(DiplomaFile.created_at.desc())
         )
+        
         result = []
         for f in res.scalars().all():
-            r = FileResponse.model_validate(f)
-            fname_only = os.path.basename(f.file_path)
-            r.file_url = f"/uploads/{fname_only}"
-            result.append(r)
+            # Faqat supervisor tarafidan uploaded fayllarni qo'shish
+            if f.uploaded_by in supervisor_user_ids:
+                r = FileResponse.model_validate(f)
+                fname_only = os.path.basename(f.file_path)
+                r.file_url = f"/uploads/{fname_only}"
+                result.append(r)
+        
+        return result
+
+    async def get_stage_student_files(self, stage_id: int, db: AsyncSession) -> list[FileResponse]:
+        """Get student-submitted files for a specific stage (stage_id = {stage_id}, uploaded_by IS student)"""
+        # Stage'ni topish
+        stage_res = await db.execute(select(DiplomaStage).where(DiplomaStage.id == stage_id))
+        stage = stage_res.scalar_one_or_none()
+        if not stage:
+            raise HTTPException(status_code=404, detail="Bosqich topilmadi")
+
+        # Student user IDs'larini olish
+        sp_res = await db.execute(select(StudentProfile))
+        student_user_ids = {sp.user_id for sp in sp_res.scalars().all()}
+
+        # Stage uchun fayllarni olish
+        res = await db.execute(
+            select(DiplomaFile)
+            .where(DiplomaFile.stage_id == stage_id)
+            .order_by(DiplomaFile.created_at.desc())
+        )
+        
+        result = []
+        for f in res.scalars().all():
+            # Faqat student tarafidan uploaded bo'lgan fayllarni qo'shish
+            if f.uploaded_by in student_user_ids:
+                r = FileResponse.model_validate(f)
+                fname_only = os.path.basename(f.file_path)
+                r.file_url = f"/uploads/{fname_only}"
+                result.append(r)
+        
         return result
 
     async def delete(self, file_id: int, user: User, db: AsyncSession):
