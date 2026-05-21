@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, BookOpen, GraduationCap, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -8,8 +8,15 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const { login } = useAuthStore()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -30,19 +37,19 @@ export default function Login() {
   }
 
   return (
-    <div style={styles.root}>
+    <div style={{...styles.root}}>
       <div style={styles.blob1} />
       <div style={styles.blob2} />
       <div style={styles.grid} />
 
-      <div style={styles.wrapper}>
+      <div style={{...styles.wrapper, flexDirection: isMobile ? 'column' : 'row'}}>
         {/* Left */}
-        <div style={styles.left}>
+        <div style={{...styles.left, display: isMobile ? 'none' : 'block'}}>
           <div style={styles.logoRow}>
             <div style={styles.logoBox}><GraduationCap size={26} color="#fff" /></div>
             <span style={styles.logoText}>DiploMap</span>
           </div>
-          <h1 style={styles.title}>
+          <h1 style={{...styles.title}}>
             Diplom<br />
             <span style={styles.titleAccent}>Monitoring</span><br />
             Tizimi
@@ -63,10 +70,10 @@ export default function Login() {
         </div>
 
         {/* Right */}
-        <div style={styles.right}>
-          <div style={styles.card}>
+        <div style={{...styles.right, width: isMobile ? '100%' : '420px', maxWidth: isMobile ? '100%' : 'none'}}>
+          <div style={{...styles.card, padding: isMobile ? '28px 20px' : '40px', borderRadius: isMobile ? '20px' : '28px'}}>
             <div style={styles.cardIconBox}><BookOpen size={20} color="#6366f1" /></div>
-            <h2 style={styles.cardTitle}>Tizimga kirish</h2>
+            <h2 style={{...styles.cardTitle, fontSize: isMobile ? '22px' : '26px'}}>Tizimga kirish</h2>
             <p style={styles.cardSub}>Davom etish uchun hisobingizga kiring</p>
 
             <form onSubmit={handleSubmit} style={styles.form}>
@@ -78,7 +85,7 @@ export default function Login() {
                   onChange={e => setForm({...form, email: e.target.value})}
                   placeholder="email@university.uz"
                   required
-                  style={styles.input}
+                  style={{...styles.input, fontSize: isMobile ? '14px' : '15px'}}
                   onFocus={e => e.target.style.borderColor='#6366f1'}
                   onBlur={e => e.target.style.borderColor='#e2e8f0'}
                 />
@@ -93,7 +100,7 @@ export default function Login() {
                     onChange={e => setForm({...form, password: e.target.value})}
                     placeholder="••••••••"
                     required
-                    style={{...styles.input, paddingRight:'48px'}}
+                    style={{...styles.input, paddingRight:'48px', fontSize: isMobile ? '14px' : '15px'}}
                     onFocus={e => e.target.style.borderColor='#6366f1'}
                     onBlur={e => e.target.style.borderColor='#e2e8f0'}
                   />
@@ -106,7 +113,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                style={{...styles.btn, opacity: loading ? 0.75 : 1}}
+                style={{...styles.btn, opacity: loading ? 0.75 : 1, fontSize: isMobile ? '14px' : '15px'}}
               >
                 {loading
                   ? <span style={styles.spinner}/>
@@ -115,9 +122,9 @@ export default function Login() {
               </button>
             </form>
 
-            <div style={styles.badges}>
+            <div style={{...styles.badges, display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'auto', gap: isMobile ? '6px' : '8px'}}>
               {['Admin','Kafedra mudiri','Ilmiy rahbar','Talaba'].map(r=>(
-                <span key={r} style={styles.badge}>{r}</span>
+                <span key={r} style={{...styles.badge, fontSize: isMobile ? '11px' : '12px', padding: isMobile ? '3px 8px' : '4px 12px'}}>{r}</span>
               ))}
             </div>
           </div>
@@ -150,7 +157,7 @@ const styles = {
   stats:{ display:'flex', gap:'36px' },
   statNum:{ fontSize:'28px', fontWeight:'700', fontFamily:"'Sora',sans-serif", background:'linear-gradient(135deg,#fff,#a5b4fc)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' },
   statLabel:{ fontSize:'12px', color:'rgba(255,255,255,0.4)', fontWeight:'500', marginTop:'3px' },
-  right:{ width:'420px', flexShrink:0, animation:'up 0.6s ease 0.15s both' },
+  right:{ flexShrink:0, animation:'up 0.6s ease 0.15s both' },
   card:{ background:'rgba(255,255,255,0.98)', borderRadius:'28px', padding:'40px', boxShadow:'0 32px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.08)' },
   cardIconBox:{ width:'44px', height:'44px', background:'linear-gradient(135deg,#eef2ff,#e0e7ff)', borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'16px' },
   cardTitle:{ fontSize:'26px', fontWeight:'700', fontFamily:"'Sora',sans-serif", color:'#0f172a', marginBottom:'6px' },

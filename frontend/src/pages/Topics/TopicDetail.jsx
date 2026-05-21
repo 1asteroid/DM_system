@@ -84,22 +84,26 @@ export default function TopicDetail() {
       
       // Supervisor materials + student files for each stage
       let allFiles = f.data || []
+      console.log('Supervisor materials:', allFiles)
       
       // Fetch student files for each stage
       if (s.data && s.data.length > 0) {
         for (const stage of s.data) {
           try {
             const { data: stageFiles } = await filesApi.list(id, stage.id)
+            console.log(`Stage ${stage.id} (${stage.name}) files:`, stageFiles)
             allFiles = allFiles.concat(stageFiles || [])
-          } catch {
-            // Ignore stage file fetch errors
+          } catch (err) {
+            console.error(`Error loading files for stage ${stage.id}:`, err)
           }
         }
       }
       
+      console.log('All files (supervisor + students):', allFiles)
       setFiles(allFiles)
       setTasks(tk.data)
-    } catch {
+    } catch (err) {
+      console.error('Data load error:', err)
       toast.error('Ma\'lumot yuklashda xatolik')
     } finally {
       setLoading(false)
