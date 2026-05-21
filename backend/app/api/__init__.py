@@ -32,7 +32,6 @@ api_router.include_router(risk_router)
 api_router.include_router(notifications_router)
 api_router.include_router(supervisors_router)
 
-# WebSocket router (not prefixed)
 app_router = APIRouter()
 app_router.include_router(websocket_router)
 

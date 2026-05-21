@@ -60,7 +60,6 @@ function SectionCard({ title, children, action }) {
   )
 }
 
-// ─── STUDENT DASHBOARD ──────────────────────────
 function StudentDashboard({ user }) {
   const [topic, setTopic] = useState(null)
   const [stages, setStages] = useState([])
@@ -79,7 +78,6 @@ function StudentDashboard({ user }) {
           ])
           setStages(sr.data)
 
-          // Risk assessment'ni yaratish va keyin olish
           try {
             const assessRes = await riskApi.assess(t.id)
             setRisk(assessRes.data || null)
@@ -201,7 +199,6 @@ function StudentDashboard({ user }) {
   )
 }
 
-// ─── SUPERVISOR DASHBOARD ────────────────────────
 function SupervisorDashboard({ user }) {
   const [stats, setStats] = useState(null)
   const [topics, setTopics] = useState([])
@@ -290,7 +287,6 @@ function SupervisorDashboard({ user }) {
   )
 }
 
-// ─── KAFEDRA HEAD DASHBOARD ──────────────────────
 function KafedraHeadDashboard({ user }) {
   const [stats, setStats] = useState(null)
   const [pendingTopics, setPendingTopics] = useState([])
@@ -365,7 +361,6 @@ function KafedraHeadDashboard({ user }) {
   )
 }
 
-// ─── ADMIN DASHBOARD ─────────────────────────────
 function AdminDashboard({ user }) {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -433,7 +428,6 @@ function AdminDashboard({ user }) {
   )
 }
 
-// ─── HELPERS ────────────────────────────────────
 function Greeting({ name, subtitle }) {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Xayrli tong' : hour < 17 ? 'Xayrli kun' : 'Xayrli kech'

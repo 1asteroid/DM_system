@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { authApi } from '../api/api'
 
-// Storage helper - handle Edge privacy mode issues
 const storage = {
   getItem: (key) => {
     try {

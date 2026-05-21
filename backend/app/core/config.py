@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def ensure_async_database_url(cls, value: str) -> str:
-        # Accept legacy postgresql:// URLs and force async driver for AsyncEngine.
         if isinstance(value, str):
             if value.startswith("postgresql://"):
                 return value.replace("postgresql://", "postgresql+asyncpg://", 1)

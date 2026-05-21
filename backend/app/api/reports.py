@@ -23,7 +23,6 @@ async def get_dashboard(
         return await report_service.dashboard(current_user, db)
     except Exception as e:
         logger.exception("Dashboard error")
-        # Return empty stats on error
         return DashboardStats(
             total_topics=0,
             approved=0,
@@ -45,7 +44,6 @@ async def get_analytics(
         return await report_service.advanced_analytics(db)
     except Exception as e:
         logger.exception("Analytics error")
-        # Return basic empty analytics on error
         return {
             'total_topics': 0,
             'total_students': 0,

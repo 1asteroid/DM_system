@@ -9,7 +9,6 @@ from ..models.models import User
 
 router = APIRouter(tags=["websocket"])
 
-# user_id -> websocket connection
 active_connections: dict[int, WebSocket] = {}
 
 
@@ -50,7 +49,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str | None = Query(Non
     """WebSocket endpoint for real-time communication."""
     await websocket.accept()
 
-    # Backward compatibility: allow auth token to be sent as first WS message.
     if not token:
         try:
             auth_msg = await websocket.receive_json()
@@ -69,7 +67,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str | None = Query(Non
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
             return
 
-        # Keep only latest connection for this user.
         old_ws = active_connections.get(user.id)
         if old_ws and old_ws is not websocket:
             try:

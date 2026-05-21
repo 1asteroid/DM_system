@@ -12,7 +12,6 @@ from sqlalchemy.orm import sessionmaker
 from app.models.models import DiplomaFile, AIAnalysis
 from app.core.config import settings
 
-# Database connection
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
@@ -22,7 +21,6 @@ engine = create_async_engine(
 
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-# Uploads directory
 UPLOADS_DIR = Path(__file__).parent.parent / "uploads"
 
 
@@ -33,7 +31,6 @@ async def fix_missing_files():
     3. Bog'langan AIAnalysis recordlarini ham o'chirish
     """
     async with AsyncSessionLocal() as db:
-        # 1. Barcha file recordlarni olish
         result = await db.execute(select(DiplomaFile))
         all_files = result.scalars().all()
         
@@ -49,7 +46,6 @@ async def fix_missing_files():
                 print(f"❌ File topilmadi: {file_record.file_path}")
                 print(f"   ID: {file_record.id} | Topic: {file_record.topic_id}")
                 
-                # 2. Bog'langan AIAnalysis recordlarini topish va o'chirish
                 analyses = await db.execute(
                     select(AIAnalysis).where(AIAnalysis.file_id == file_record.id)
                 )
@@ -60,21 +56,18 @@ async def fix_missing_files():
                     for analysis in related_analyses:
                         await db.delete(analysis)
                 
-                # 3. File recordni o'chirish
                 await db.delete(file_record)
                 orphan_count += 1
                 print()
             else:
                 valid_count += 1
         
-        # Commit changes
         if orphan_count > 0:
             await db.commit()
             print(f"\n✅ {orphan_count} ta orphan file record o'chirildi")
         
         print(f"✅ {valid_count} ta haqiqiy file saqlandi")
         
-        # 4. Verification - check if remaining files exist
         result = await db.execute(select(DiplomaFile))
         remaining = result.scalars().all()
         

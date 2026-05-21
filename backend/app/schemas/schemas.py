@@ -3,19 +3,14 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from ..models.models import UserRole, TopicStatus, StageStatus, MeetingStatus, NotificationType
 
 
-# ═══════════════════════════════════════════════
-# AUTH SCHEMAS
-# ═══════════════════════════════════════════════
 
 class RegisterRequest(BaseModel):
     full_name: str
     email: EmailStr
     password: str
     role: UserRole = UserRole.STUDENT
-    # Student fields
     group_id: int | None = None
     student_id: str | None = None
-    # Supervisor fields
     academic_rank: str | None = None
 
     @field_validator("password")
@@ -33,10 +28,8 @@ class UserCreateRequest(BaseModel):
     password: str = Field(..., min_length=8)
     role: UserRole
     kafedra_id: int | None = None
-    # Student fields
     group_id: int | None = None
     student_id: str | None = None
-    # Supervisor fields
     academic_rank: str | None = None
 
     @field_validator("password")
@@ -79,11 +72,9 @@ class UserResponse(BaseModel):
     kafedra_id: int | None = None
     telegram_id: str | None = None
     avatar_url: str | None = None
-    # Student info
     group_id: int | None = None
     group_name: str | None = None
     student_id: str | None = None
-    # Supervisor info
     academic_rank: str | None = None
     supervisor_profile_id: int | None = None
     model_config = {"from_attributes": True}
@@ -110,9 +101,6 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
-# ═══════════════════════════════════════════════
-# KAFEDRA & GROUP SCHEMAS
-# ═══════════════════════════════════════════════
 
 class KafedraResponse(BaseModel):
     id: int
@@ -129,9 +117,6 @@ class GroupResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ═══════════════════════════════════════════════
-# TOPIC SCHEMAS
-# ═══════════════════════════════════════════════
 
 class TopicCreateRequest(BaseModel):
     title: str = Field(..., min_length=5, max_length=500)
@@ -171,9 +156,6 @@ class TopicApproveRequest(BaseModel):
     supervisor_id: int | None = None
 
 
-# ═══════════════════════════════════════════════
-# CATALOG SCHEMAS
-# ═══════════════════════════════════════════════
 
 class CatalogTopicCreateRequest(BaseModel):
     title: str = Field(..., min_length=5, max_length=500)
@@ -249,9 +231,6 @@ class TopicListResponse(BaseModel):
     items: list[TopicResponse]
 
 
-# ═══════════════════════════════════════════════
-# STAGE SCHEMAS
-# ═══════════════════════════════════════════════
 
 class StageCreateRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
@@ -289,9 +268,6 @@ class StageResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ═══════════════════════════════════════════════
-# FILE SCHEMAS
-# ═══════════════════════════════════════════════
 
 class FileResponse(BaseModel):
     id: int
@@ -319,9 +295,6 @@ class FileCommentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ═══════════════════════════════════════════════
-# TASK SCHEMAS
-# ═══════════════════════════════════════════════
 
 class TaskCreateRequest(BaseModel):
     title: str = Field(..., min_length=3, max_length=300)
@@ -348,9 +321,6 @@ class TaskResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ═══════════════════════════════════════════════
-# MEETING SCHEMAS
-# ═══════════════════════════════════════════════
 
 class MeetingCreateRequest(BaseModel):
     title: str
@@ -394,9 +364,6 @@ class MeetingResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ═══════════════════════════════════════════════
-# MESSAGE SCHEMAS
-# ═══════════════════════════════════════════════
 
 class MessageCreateRequest(BaseModel):
     receiver_id: int
@@ -434,9 +401,6 @@ class ConversationContactResponse(BaseModel):
     unread_count: int
 
 
-# ═══════════════════════════════════════════════
-# AI ANALYSIS SCHEMAS
-# ═══════════════════════════════════════════════
 
 class TextAnalysisRequest(BaseModel):
     topic_id: int
@@ -454,9 +418,6 @@ class AIAnalysisResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ═══════════════════════════════════════════════
-# RISK ASSESSMENT SCHEMAS
-# ═══════════════════════════════════════════════
 
 class RiskAssessmentResponse(BaseModel):
     id: int
@@ -482,9 +443,6 @@ class RiskListItem(BaseModel):
     assessed_at: str
 
 
-# ═══════════════════════════════════════════════
-# NOTIFICATION SCHEMAS
-# ═══════════════════════════════════════════════
 
 class NotificationResponse(BaseModel):
     id: int
@@ -496,9 +454,6 @@ class NotificationResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ═══════════════════════════════════════════════
-# REPORT SCHEMAS
-# ═══════════════════════════════════════════════
 
 class TopicStatItem(BaseModel):
     status: str
@@ -515,9 +470,6 @@ class DashboardStats(BaseModel):
     topics_by_status: list[TopicStatItem]
 
 
-# ═══════════════════════════════════════════════
-# COMMON
-# ═══════════════════════════════════════════════
 
 class MessageOnly(BaseModel):
     message: str

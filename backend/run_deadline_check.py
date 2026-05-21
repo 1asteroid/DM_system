@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 Deadline scheduler — deadline eslatmalarini avtomatik tekshiradi.
 Her 1 soatda ishga tushiriladi.

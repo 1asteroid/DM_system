@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { topicsApi, usersApi } from '../../api/api'
 import toast from 'react-hot-toast'

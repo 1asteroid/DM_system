@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import aiohttp
-# joblib, numpy and sklearn used only by ML parts — import lazily to avoid startup failures on restricted hosts
 try:
     import joblib
 except Exception:  # pragma: no cover - optional
@@ -22,7 +21,6 @@ from fastapi.responses import FileResponse as StarletteFileResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-# sklearn will be imported where needed
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +82,6 @@ async def _notify(user_id: int | None, ntype: NotificationType, title: str, body
     db.add(Notification(user_id=user_id, type=ntype, title=title, body=body, sent_to_tg=sent_to_tg))
 
 
-# ═══════════════════════════════════════════════
-# AUTH SERVICE
-# ═══════════════════════════════════════════════
 
 class AuthService:
     async def _load_user_for_response(self, user_id: int, db: AsyncSession) -> User:
@@ -132,7 +127,6 @@ class AuthService:
         )
         db.add(user)
         await db.flush()
-        # Rolga qarab profil avtomatik yaratiladi
         if data.role == UserRole.STUDENT:
             profile = StudentProfile(
                 user_id=user.id,
@@ -159,7 +153,6 @@ class AuthService:
         if res.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Bu email allaqachon ro'yxatdan o'tgan")
         
-        # Talabalar uchun kafedra_id majburiy
         if data.role == UserRole.STUDENT and not data.kafedra_id:
             raise HTTPException(status_code=400, detail="Talabalar uchun kafedra ko'rsatilishi kerak")
         
@@ -173,7 +166,6 @@ class AuthService:
         db.add(user)
         await db.flush()
         
-        # Rolga qarab profil avtomatik yaratiladi
         if data.role == UserRole.STUDENT:
             profile = StudentProfile(
                 user_id=user.id,
@@ -247,9 +239,6 @@ class AuthService:
         )
 
 
-# ═══════════════════════════════════════════════
-# TOPIC SERVICE
-# ═══════════════════════════════════════════════
 
 class TopicService:
     @staticmethod
@@ -261,7 +250,6 @@ class TopicService:
 
     @staticmethod
     def _supervisor_assignment_active(topic: DiplomaTopic) -> bool:
-        # Supervisor is considered finalized only after topic approval.
         return topic.status == TopicStatus.APPROVED and topic.supervisor_id is not None
 
     async def create(self, data: TopicCreateRequest, user: User, db: AsyncSession) -> TopicResponse:
@@ -299,7 +287,6 @@ class TopicService:
         student = user.student_profile
         if not student:
             raise HTTPException(status_code=400, detail="Talaba profili topilmadi")
-        # Faol (draft/pending/approved) mavzu borligini tekshirish — rejected bo'lsa yangi taklif mumkin
         active_res = await db.execute(
             select(DiplomaTopic).where(
                 DiplomaTopic.student_id == student.id,
@@ -308,7 +295,6 @@ class TopicService:
         )
         if active_res.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Sizda allaqon faol diplom mavzusi mavjud")
-        # Eski rejected mavzuni o'chirib yuborish (unique constraint uchun)
         old_rejected_res = await db.execute(
             select(DiplomaTopic).where(
                 DiplomaTopic.student_id == student.id,
@@ -356,7 +342,6 @@ class TopicService:
                 DiplomaTopic.status == TopicStatus.APPROVED,
             )
         elif user.role == UserRole.KAFEDRA_HEAD:
-            # Kafedra head sees topics of students in their kafedra only
             from ..models.models import StudentProfile as SP
             q = q.join(SP, DiplomaTopic.student_id == SP.id).join(
                 User, SP.user_id == User.id
@@ -366,13 +351,11 @@ class TopicService:
         if search:
             q = q.where(or_(DiplomaTopic.title.ilike(f"%{search}%"), DiplomaTopic.title_en.ilike(f"%{search}%")))
         
-        # Eager load student relationship
         q = q.options(joinedload(DiplomaTopic.student).joinedload(StudentProfile.user))
         
         total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
         q = q.offset((page - 1) * page_size).limit(page_size).order_by(DiplomaTopic.created_at.desc())
         items = (await db.execute(q)).scalars().all()
-        # Count submitted stages per topic in one query
         topic_ids = [t.id for t in items]
         submitted_counts: dict[int, int] = {}
         if topic_ids:
@@ -387,7 +370,6 @@ class TopicService:
         for t in items:
             r = TopicResponse.model_validate(t)
             r.stages_submitted = submitted_counts.get(t.id, 0)
-            # Add student_name from the related student profile's user
             if t.student and t.student.user:
                 r.student_name = t.student.user.full_name
             result.append(r)
@@ -428,7 +410,6 @@ class TopicService:
         topic.status = TopicStatus.PENDING
         topic.updated_at = datetime.now(timezone.utc)
         await db.flush()
-        # Notify kafedra heads
         heads_res = await db.execute(
             select(User).where(User.role == UserRole.KAFEDRA_HEAD, User.is_active == True)  # noqa: E712
         )
@@ -453,7 +434,6 @@ class TopicService:
         if topic.status != TopicStatus.PENDING:
             raise HTTPException(status_code=400, detail="Faqat pending holatdagi mavzuni tasdiqlash mumkin")
 
-        # Optional supervisor assignment at approval time
         if supervisor_user_id is not None:
             sup_res = await db.execute(
                 select(User)
@@ -469,12 +449,10 @@ class TopicService:
         topic.approved_at = datetime.now(timezone.utc)
         topic.updated_at = datetime.now(timezone.utc)
 
-        # Notify student after approval
         await self._notify_student(topic, NotificationType.STATUS_CHANGED,
                                    "Mavzungiz tasdiqlandi",
                                    f"'{topic.title}' mavzusi admin/kafedra mudiri tomonidan tasdiqlandi.", db)
 
-        # Notify supervisor only when assignment becomes active (approved)
         if topic.supervisor_id:
             sup_res = await db.execute(
                 select(SupervisorProfile).where(SupervisorProfile.id == topic.supervisor_id)
@@ -536,7 +514,6 @@ class TopicService:
         total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
         q = q.offset((page - 1) * page_size).limit(page_size).order_by(DiplomaTopic.created_at.desc())
         items = (await db.execute(q)).scalars().all()
-        # Count submitted stages per topic in one query
         topic_ids = [t.id for t in items]
         submitted_counts: dict[int, int] = {}
         if topic_ids:
@@ -556,7 +533,6 @@ class TopicService:
 
     async def get_one_with_rejected(self, topic_id: int, user: User, db: AsyncSession) -> TopicDetailResponse:
         topic = await self._get_or_404(topic_id, db, with_stages=True)
-        # Allow access if user is admin, kafedra_head, or the topic owner
         if user.role in (UserRole.ADMIN, UserRole.KAFEDRA_HEAD):
             return TopicDetailResponse.model_validate(topic)
         if user.role == UserRole.STUDENT and topic.student_id == user.student_profile.id:
@@ -567,7 +543,6 @@ class TopicService:
 
     async def update_with_rejected(self, topic_id: int, data: TopicUpdateRequest, user: User, db: AsyncSession) -> TopicResponse:
         topic = await self._get_or_404(topic_id, db)
-        # Allow updates by admin, kafedra_head, or the topic owner
         if user.role in (UserRole.ADMIN, UserRole.KAFEDRA_HEAD):
             pass
         elif user.role == UserRole.STUDENT and topic.student_id == user.student_profile.id:
@@ -587,7 +562,6 @@ class TopicService:
 
     async def delete_with_rejected(self, topic_id: int, user: User, db: AsyncSession):
         topic = await self._get_or_404(topic_id, db)
-        # Allow deletes by admin, kafedra_head, or the topic owner
         if user.role in (UserRole.ADMIN, UserRole.KAFEDRA_HEAD):
             pass
         elif user.role == UserRole.STUDENT and topic.student_id == user.student_profile.id:
@@ -603,7 +577,6 @@ class TopicService:
 
     async def submit_with_rejected(self, topic_id: int, user: User, db: AsyncSession) -> TopicResponse:
         topic = await self._get_or_404(topic_id, db)
-        # Allow submits by student only
         if user.role != UserRole.STUDENT:
             raise HTTPException(status_code=403, detail="Faqat talabalar mavzu yuborishi mumkin")
         if topic.status != TopicStatus.DRAFT:
@@ -611,7 +584,6 @@ class TopicService:
         topic.status = TopicStatus.PENDING
         topic.updated_at = datetime.now(timezone.utc)
         await db.flush()
-        # Notify kafedra heads
         heads_res = await db.execute(
             select(User).where(User.role == UserRole.KAFEDRA_HEAD, User.is_active == True)  # noqa: E712
         )
@@ -630,7 +602,6 @@ class TopicService:
         topic.approved_at = datetime.now(timezone.utc)
         topic.updated_at = datetime.now(timezone.utc)
         await db.flush()
-        # Notify student
         await self._notify_student(topic, NotificationType.STATUS_CHANGED,
                                    "Mavzungiz tasdiqlandi",
                                    f"'{topic.title}' mavzusi kafedra mudiri tomonidan tasdiqlandi.", db)
@@ -670,7 +641,6 @@ class TopicService:
         q = select(DiplomaTopic).where(DiplomaTopic.id == topic_id)
         if with_stages:
             q = q.options(selectinload(DiplomaTopic.stages))
-        # Always eagerly load student and supervisor for access control
         q = q.options(
             selectinload(DiplomaTopic.student).selectinload(StudentProfile.user),
             selectinload(DiplomaTopic.supervisor).selectinload(SupervisorProfile.user)
@@ -685,7 +655,6 @@ class TopicService:
         if user.role == UserRole.ADMIN:
             return
         if user.role == UserRole.KAFEDRA_HEAD:
-            # Kafedra head can access topics of their kafedra's students only
             if not user.kafedra_id:
                 raise HTTPException(status_code=403, detail="Kafedra mudiriga kafedra ko'rsatilmagan")
             if not topic.student or not topic.student.user or topic.student.user.kafedra_id != user.kafedra_id:
@@ -712,7 +681,6 @@ class TopicService:
         if sp:
             await _notify(sp.user_id, ntype, title, body, db)
 
-    # ── Catalog / Template methods ─────────────────────────────────────��──────
 
     async def create_catalog(self, data: CatalogTopicCreateRequest, user: User,
                               db: AsyncSession) -> CatalogTopicResponse:
@@ -766,7 +734,6 @@ class TopicService:
         student = user.student_profile
         if not student:
             raise HTTPException(status_code=400, detail="Talaba profili topilmadi")
-        # Faol mavzu borligini tekshirish — rejected bo'lsa katalogdan yangi mavzu tanlay oladi
         active_res = await db.execute(
             select(DiplomaTopic).where(
                 DiplomaTopic.student_id == student.id,
@@ -775,7 +742,6 @@ class TopicService:
         )
         if active_res.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Sizda allaqon faol diplom mavzusi mavjud")
-        # Eski rejected mavzuni unique constraint uchun tozalash
         old_rej_res = await db.execute(
             select(DiplomaTopic).where(
                 DiplomaTopic.student_id == student.id,
@@ -804,7 +770,6 @@ class TopicService:
         """Muddat o'tgandan so'ng mavzu tanlamagan talablarga avtomatik mavzu va rahbar tayinlash."""
         if user.role not in (UserRole.KAFEDRA_HEAD, UserRole.ADMIN):
             raise HTTPException(status_code=403, detail="Ruxsat yo'q")
-        # Students without any diploma topic
         subq = select(DiplomaTopic.student_id).where(DiplomaTopic.student_id != None)  # noqa: E711
         students_res = await db.execute(
             select(StudentProfile).where(StudentProfile.id.not_in(subq))
@@ -812,7 +777,6 @@ class TopicService:
         unassigned = students_res.scalars().all()
         if not unassigned:
             return {"assigned": 0, "message": "Barcha talabalar mavzu tanlagan"}
-        # Unclaimed catalog topics for this academic year
         topics_res = await db.execute(
             select(DiplomaTopic).where(
                 DiplomaTopic.is_template == True,  # noqa: E712
@@ -821,7 +785,6 @@ class TopicService:
             ).order_by(DiplomaTopic.id)
         )
         available = list(topics_res.scalars().all())
-        # Supervisors with remaining capacity
         sups_res = await db.execute(
             select(SupervisorProfile).options(selectinload(SupervisorProfile.diploma_topics))
         )
@@ -872,9 +835,6 @@ class TopicService:
         )
 
 
-# ═══════════════════════════════════════════════
-# STAGE SERVICE
-# ═══════════════════════════════════════════════
 
 class StageService:
     async def create(self, topic_id: int, data: StageCreateRequest, user: User, db: AsyncSession):
@@ -884,7 +844,6 @@ class StageService:
                 status_code=400,
                 detail="Bosqich qo'shish uchun mavzu tasdiqlangan va ilmiy rahbar biriktirilgan bo'lishi kerak",
             )
-        # Faqat SUPERVISOR o'z o'quvchilari mavzulariga bosqich qo'sha oladi
         if user.role == UserRole.SUPERVISOR:
             if not user.supervisor_profile or topic.supervisor_id != user.supervisor_profile.id:
                 raise HTTPException(status_code=403, detail="Faqat o'z o'quvchilari mavzulariga bosqich qo'sha olishingiz mumkin")
@@ -896,8 +855,6 @@ class StageService:
         )
         existing_count = existing_count_res.scalar_one()
 
-        # Barcha bosqichlar NOT_STARTED holatida yaratiladi.
-        # Ular IN_PROGRESS ga o'tadilar faqat oldingi bosqichning fayllari tasdiqlangandan keyin
         initial_status = StageStatus.NOT_STARTED
         stage = DiplomaStage(
             topic_id=topic_id,
@@ -934,7 +891,6 @@ class StageService:
         if stage.status not in (StageStatus.NOT_STARTED, StageStatus.IN_PROGRESS, StageStatus.REJECTED):
             raise HTTPException(status_code=400, detail="Bu bosqich allaqon yuborilgan yoki tasdiqlangan")
         if user.role == UserRole.STUDENT:
-            # Sequential enforcement: all previous stages must be approved
             blocking_res = await db.execute(
                 select(DiplomaStage).where(
                     DiplomaStage.topic_id == stage.topic_id,
@@ -951,7 +907,6 @@ class StageService:
         stage.status = StageStatus.SUBMITTED
         stage.submitted_at = datetime.now(timezone.utc)
         await db.flush()
-        # Notify supervisor
         topic_res = await db.execute(select(DiplomaTopic).where(DiplomaTopic.id == stage.topic_id))
         topic = topic_res.scalar_one_or_none()
         if topic and topic.supervisor_id:
@@ -967,24 +922,20 @@ class StageService:
 
     async def review(self, stage_id: int, data: StageReviewRequest, user: User, db: AsyncSession):
         """Review and approve/reject stage (supervisor or kafedra head only)"""
-        # Only supervisors and kafedra heads can review stages
         if user.role not in (UserRole.SUPERVISOR, UserRole.KAFEDRA_HEAD, UserRole.ADMIN):
             raise HTTPException(status_code=403, detail="Faqat ilmiy rahbar yoki kafedra mudiri bosqichni ko'rib chiqishi mumkin")
         
         stage = await self._get_or_404(stage_id, db)
         
-        # Get topic to check authorization
         topic_res = await db.execute(select(DiplomaTopic).where(DiplomaTopic.id == stage.topic_id))
         topic = topic_res.scalar_one_or_none()
         if not topic:
             raise HTTPException(status_code=404, detail="Mavzu topilmadi")
         
-        # Check authorization
         if user.role == UserRole.SUPERVISOR:
             if not user.supervisor_profile or topic.supervisor_id != user.supervisor_profile.id:
                 raise HTTPException(status_code=403, detail="Ruxsat yo'q")
         elif user.role == UserRole.KAFEDRA_HEAD:
-            # Kafedra head can review stages for topics of their kafedra's students only
             if not user.kafedra_id:
                 raise HTTPException(status_code=403, detail="Kafedra mudiriga kafedra ko'rsatilmagan")
             if not topic.student or not topic.student.user or topic.student.user.kafedra_id != user.kafedra_id:
@@ -995,7 +946,6 @@ class StageService:
         stage.comment = data.comment
 
         if data.approved:
-            # Faqat tasdiqlangandan keyin navbatdagi bosqich active qilinadi.
             next_stage_res = await db.execute(
                 select(DiplomaStage)
                 .where(
@@ -1009,7 +959,6 @@ class StageService:
             if next_stage and next_stage.status == StageStatus.NOT_STARTED:
                 next_stage.status = StageStatus.IN_PROGRESS
 
-        # Talabaga bildirishnoma yuborish
         topic_res = await db.execute(select(DiplomaTopic).where(DiplomaTopic.id == stage.topic_id))
         topic = topic_res.scalar_one_or_none()
         if topic and topic.student_id:
@@ -1035,7 +984,6 @@ class StageService:
         if stage.status != StageStatus.NOT_STARTED:
             raise HTTPException(status_code=400, detail="Faqat boshlanmagan bosqichni boshlash mumkin")
 
-        # Avvalgi bosqichlar tasdiqlanmagan bo'lsa, keyingisini boshlab bo'lmaydi.
         blocking_res = await db.execute(
             select(DiplomaStage).where(
                 DiplomaStage.topic_id == stage.topic_id,
@@ -1086,9 +1034,6 @@ class StageService:
         return topic
 
 
-# ═══════════════════════════════════════════════
-# FILE SERVICE
-# ═══════════════════════════════════════════════
 
 class FileService:
     async def upload(self, topic_id: int, stage_id: int | None,
@@ -1096,14 +1041,12 @@ class FileService:
         content = await file.read()
         stage = None
 
-        # Bosqich fayli uchun har doim 20MB limit
         max_bytes = 20 * 1024 * 1024 if stage_id else settings.MAX_FILE_SIZE_MB * 1024 * 1024
         if len(content) > max_bytes:
             limit_label = "20MB" if stage_id else f"{settings.MAX_FILE_SIZE_MB}MB"
             raise HTTPException(status_code=413, detail=f"Fayl hajmi {limit_label} dan oshmasligi kerak")
 
         if stage_id:
-            # Bosqich holatini tekshirish
             stage_res = await db.execute(select(DiplomaStage).where(DiplomaStage.id == stage_id))
             stage = stage_res.scalar_one_or_none()
             if not stage:
@@ -1118,11 +1061,9 @@ class FileService:
                 raise HTTPException(status_code=400,
                                     detail="Bu bosqich tasdiqlangan — fayl yuklash mumkin emas")
 
-            # NOT_STARTED bosqichni IN_PROGRESS ga o'tkazish (birinchi faylni yuklashda)
             if stage.status == StageStatus.NOT_STARTED:
                 stage.status = StageStatus.IN_PROGRESS
 
-            # Bosqichning eski faylini o'chirish (faqat 1 ta fayl qoidasi)
             old_res = await db.execute(
                 select(DiplomaFile).where(
                     DiplomaFile.topic_id == topic_id,
@@ -1139,24 +1080,20 @@ class FileService:
                 await db.delete(old_f)
             await db.flush()
 
-        # Versiya raqami
         ver_res = await db.execute(
             select(func.max(DiplomaFile.version))
             .where(DiplomaFile.topic_id == topic_id, DiplomaFile.stage_id == stage_id)
         )
         last_version = ver_res.scalar_one_or_none() or 0
 
-        # Diskka saqlash
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
         original_name = file.filename or "file"
         ext = os.path.splitext(original_name)[1].lower()
         base_name = os.path.splitext(original_name)[0]
 
-        # Disk nomi: uuid (tasdiqlanган unikal)
         fname = f"{uuid.uuid4().hex}{ext}"
         fpath = os.path.join(settings.UPLOAD_DIR, fname)
 
-        # Ko'rinadigan nom: 6 xonali raqam + original nom
         unique_code = str(random.randint(100000, 999999))
         display_name = f"{unique_code}_{base_name}{ext}"
 
@@ -1173,12 +1110,10 @@ class FileService:
         await db.flush()
 
         if stage_id:
-            # Fayl yuklash = avtomatik bosqichni "submitted" ga o'tkazish
             assert stage is not None
             stage.status = StageStatus.SUBMITTED
             stage.submitted_at = datetime.now(timezone.utc)
             await db.flush()
-            # Supervisorga bildirishnoma
             topic_res = await db.execute(select(DiplomaTopic).where(DiplomaTopic.id == topic_id))
             topic = topic_res.scalar_one_or_none()
             if topic and topic.supervisor_id:
@@ -1198,7 +1133,6 @@ class FileService:
 
     async def get_list(self, topic_id: int, db: AsyncSession) -> list[FileResponse]:
         """Get topic-level supervisor files (stage_id IS NULL, uploaded_by IS supervisor)"""
-        # Supervisor user IDs'larini olish
         sup_prof_res = await db.execute(select(SupervisorProfile))
         supervisor_user_ids = {sp.user_id for sp in sup_prof_res.scalars().all()}
 
@@ -1212,7 +1146,6 @@ class FileService:
         
         result = []
         for f in res.scalars().all():
-            # Faqat supervisor tarafidan uploaded fayllarni qo'shish
             if f.uploaded_by in supervisor_user_ids:
                 r = FileResponse.model_validate(f)
                 fname_only = os.path.basename(f.file_path)
@@ -1223,17 +1156,14 @@ class FileService:
 
     async def get_stage_student_files(self, stage_id: int, db: AsyncSession) -> list[FileResponse]:
         """Get student-submitted files for a specific stage (stage_id = {stage_id}, uploaded_by IS student)"""
-        # Stage'ni topish
         stage_res = await db.execute(select(DiplomaStage).where(DiplomaStage.id == stage_id))
         stage = stage_res.scalar_one_or_none()
         if not stage:
             raise HTTPException(status_code=404, detail="Bosqich topilmadi")
 
-        # Student user IDs'larini olish
         sp_res = await db.execute(select(StudentProfile))
         student_user_ids = {sp.user_id for sp in sp_res.scalars().all()}
 
-        # Stage uchun fayllarni olish
         res = await db.execute(
             select(DiplomaFile)
             .where(DiplomaFile.stage_id == stage_id)
@@ -1242,7 +1172,6 @@ class FileService:
         
         result = []
         for f in res.scalars().all():
-            # Faqat student tarafidan uploaded bo'lgan fayllarni qo'shish
             if f.uploaded_by in student_user_ids:
                 r = FileResponse.model_validate(f)
                 fname_only = os.path.basename(f.file_path)
@@ -1256,7 +1185,6 @@ class FileService:
         f = res.scalar_one_or_none()
         if not f:
             raise HTTPException(status_code=404, detail="Fayl topilmadi")
-        # Faqat faylni yuklagan user yoki admin/kafedra_head o'chira oladi
         if user.role not in (UserRole.ADMIN, UserRole.KAFEDRA_HEAD) and f.uploaded_by != user.id:
             raise HTTPException(status_code=403, detail="Faqat o'z faylingizni o'chira olasiz")
         full_path = f.file_path if os.path.isabs(f.file_path) else os.path.join(settings.UPLOAD_DIR, f.file_path)
@@ -1294,9 +1222,6 @@ class FileService:
         return comment
 
 
-# ═══════════════════════════════════════════════
-# TASK SERVICE
-# ═══════════════════════════════════════════════
 
 class TaskService:
     async def create(self, topic_id: int, data: TaskCreateRequest, user: User, db: AsyncSession) -> TaskResponse:
@@ -1304,7 +1229,6 @@ class TaskService:
                     title=data.title, description=data.description, deadline=data.deadline)
         db.add(task)
         await db.flush()
-        # Talabaga bildirishnoma yuborish
         topic_res = await db.execute(select(DiplomaTopic).where(DiplomaTopic.id == topic_id))
         topic = topic_res.scalar_one_or_none()
         if topic and topic.student_id:
@@ -1344,9 +1268,6 @@ class TaskService:
         return {"message": "Vazifa o'chirildi"}
 
 
-# ═══════════════════════════════════════════════
-# MEETING SERVICE
-# ═══════════════════════════════════════════════
 
 def _load_meeting(q):
     """Meeting queryga attendees + user ni eager load qiladi."""
@@ -1372,13 +1293,11 @@ class MeetingService:
         db.add(meeting)
         await db.flush()
 
-        # Qatnashchilarni saqlash
         attendee_ids = list(set(data.attendee_ids))
         for uid in attendee_ids:
             db.add(MeetingAttendee(meeting_id=meeting.id, user_id=uid))
         await db.flush()
 
-        # Faqat tanlangan qatnashchilarga bildirishnoma
         time_str = meeting.scheduled_at.strftime('%d.%m.%Y %H:%M')
         loc_str = f", joy: {meeting.location}" if meeting.location else ""
         reason_str = f"\nSabab: {meeting.reason}" if meeting.reason else ""
@@ -1389,7 +1308,6 @@ class MeetingService:
                 await _notify(uid, NotificationType.MEETING_SCHEDULED,
                               f"Yangi uchrashuv: {meeting.title}", body, db)
 
-        # Eager load bilan qaytadan yuklab olish
         res = await db.execute(
             _load_meeting(select(Meeting)).where(Meeting.id == meeting.id)
         )
@@ -1490,9 +1408,6 @@ class MeetingService:
         return MeetingResponse(**data)
 
 
-# ═══════════════════════════════════════════════
-# MESSAGE SERVICE
-# ═══════════════════════════════════════════════
 
 class MessageService:
     async def _safe_ws_send(self, user_id: int, payload: dict):
@@ -1545,7 +1460,6 @@ class MessageService:
         )
         msgs = res.scalars().all()
 
-        # Mark received messages as read when conversation is opened.
         for m in msgs:
             if m.receiver_id == user.id and not m.is_read:
                 m.is_read = True
@@ -1640,7 +1554,6 @@ class MessageService:
             "topic_title": topic.title,
         }
 
-    # Supervisor group uses a virtual topic_id = supervisor_profile.id + 1_000_000
     _GROUP_OFFSET = 1_000_000
 
     async def _get_supervisor_virtual_topic_id(self, supervisor_user_id: int, db: AsyncSession) -> int:
@@ -1656,12 +1569,10 @@ class MessageService:
     ) -> MessageResponse:
         """Send a message to the supervisor's group (all his students + himself)."""
         virtual_topic_id = await self._get_supervisor_virtual_topic_id(data.supervisor_user_id, db)
-        # Verify sender is the supervisor or one of their students
         is_allowed = False
         if user.role == UserRole.SUPERVISOR and user.id == data.supervisor_user_id:
             is_allowed = True
         elif user.role == UserRole.STUDENT and user.student_profile:
-            # Check if student has a topic supervised by this supervisor
             topic_res = await db.execute(
                 select(DiplomaTopic).join(SupervisorProfile, DiplomaTopic.supervisor_id == SupervisorProfile.id)
                 .where(
@@ -1700,7 +1611,6 @@ class MessageService:
             ).order_by(Message.created_at)
         )
         msgs = res.scalars().all()
-        # Fetch sender names
         sender_ids = list({m.sender_id for m in msgs})
         sender_map: dict[int, str] = {}
         if sender_ids:
@@ -1722,7 +1632,6 @@ class MessageService:
         )
         msgs = res.scalars().all()
 
-        # Collect unique partner IDs preserving latest-message order
         seen: set[int] = set()
         partner_ids: list[int] = []
         for m in msgs:
@@ -1742,7 +1651,6 @@ class MessageService:
             partner = users_map.get(pid)
             if not partner:
                 continue
-            # Latest message between user and this partner
             last_msg = next(
                 (m for m in msgs
                  if (m.sender_id == user.id and m.receiver_id == pid)
@@ -1765,9 +1673,6 @@ class MessageService:
         return contacts
 
 
-# ═══════════════════════════════════════════════
-# NOTIFICATION SERVICE
-# ═══════════════════════════════════════════════
 
 class NotificationService:
     async def get_list(self, user: User, db: AsyncSession) -> list[NotificationResponse]:
@@ -1853,7 +1758,6 @@ class NotificationService:
         return {"sent_notifications": sent_count}
 
 
-# CATALOG SERVICE
 class CatalogService:
     """Compatibility wrapper; catalog logic is implemented in TopicService."""
 
@@ -1888,7 +1792,6 @@ class CatalogService:
         return await TopicService().auto_assign(academic_year, user, db)
 
 
-# REPORT SERVICE
 class ReportService:
     async def dashboard(self, user: User, db: AsyncSession) -> DashboardStats:
         q = select(DiplomaTopic)
@@ -1934,7 +1837,6 @@ class ReportService:
             for s, c in status_res.all()
         ]
 
-        # Keep analytics consistent even for legacy rows with old risk_level values.
         risk_scores = (await db.execute(select(RiskAssessment.risk_score))).scalars().all()
         risk_distribution = {"low": 0, "medium": 0, "high": 0, "critical": 0}
         for score in risk_scores:
@@ -1997,9 +1899,6 @@ class ReportService:
         }
 
 
-# ═══════════════════════════════════════════════
-# AI ANALYSIS SERVICE
-# ═══════════════════════════════════════════════
 
 class AIAnalysisService:
     def _analyze_text_content(self, content: str) -> dict:
@@ -2064,14 +1963,10 @@ class AIAnalysisService:
         return [AIAnalysisResponse.model_validate(a) for a in res.scalars().all()]
 
 
-# ═══════════════════════════════════════════════
-# RISK SERVICE
-# ═══════════════════════════════════════════════
 
 class RiskService:
     def __init__(self):
         """Initialize RiskService and load ML model if available"""
-        # ML Model loading
         model_dir = Path(__file__).parent.parent.parent / "models"
         self.use_ml_model = (model_dir / "risk_rf_model.pkl").exists()
         
@@ -2088,7 +1983,6 @@ class RiskService:
     
     @staticmethod
     def _risk_level_from_score(risk_score: float) -> str:
-        # Keep levels aligned with UI and analytics buckets.
         if risk_score >= 90:
             return 'critical'
         if risk_score >= 80:
@@ -2125,7 +2019,6 @@ class RiskService:
 
         now = datetime.now(timezone.utc)
         
-        # Helper to ensure datetimes are timezone-aware
         def make_aware(dt):
             if dt is None:
                 return None
@@ -2133,7 +2026,6 @@ class RiskService:
                 return dt.replace(tzinfo=timezone.utc)
             return dt
 
-        # Ensure all dates are timezone-aware
         created_at = make_aware(topic.created_at)
         defense_date = make_aware(topic.defense_date)
         
@@ -2141,11 +2033,8 @@ class RiskService:
         risk_level = 'low'
         factors: list[dict] = []
         
-        # === ML MODEL PREDICTION ===
         if self.use_ml_model:
             try:
-                # Extract features matching training pipeline
-                # Feature 1: Progress gap
                 if defense_date and created_at:
                     total_days = (defense_date - created_at).days
                     passed_days = (now - created_at).days
@@ -2157,7 +2046,6 @@ class RiskService:
                 else:
                     progress_gap = 0
                 
-                # Feature 2-4: Stage, task, meeting
                 stages = topic.stages
                 if stages:
                     approved_cnt = sum(1 for s in stages if s.status.value == 'approved')
@@ -2173,17 +2061,13 @@ class RiskService:
                 
                 meeting_count = len(meetings)
                 
-                # Feature 5: Days passed
                 days_passed = (now - created_at).days if created_at else 0
                 
-                # Feature 6: Topic status (encoded)
                 status_map = {'draft': 0, 'pending': 1, 'approved': 2, 'rejected': -1}
                 status_encoded = status_map.get(topic.status.value, 0)
                 
-                # Feature 7: Progress value
                 progress = topic.progress
                 
-                # Build feature vector (same order as training)
                 features = np.array([[
                     progress_gap,           # 0
                     stage_completion,       # 1
@@ -2194,10 +2078,8 @@ class RiskService:
                     progress,               # 6
                 ]])
                 
-                # Scale features
                 features_scaled = self.ml_scaler.transform(features)
                 
-                # Predict using ML model
                 risk_level_pred = self.ml_model.predict(features_scaled)[0]
                 risk_proba = self.ml_model.predict_proba(features_scaled)[0].max()
                 risk_score = risk_proba * 100
@@ -2218,13 +2100,10 @@ class RiskService:
                 factors = []
                 risk_level = 'low'
         
-        # === RULE-BASED FALLBACK ===
         if not self.use_ml_model:
-            # Factor 1: Progress vs expected timeline
             if defense_date and created_at:
                 total_days = (defense_date - created_at).days
                 passed_days = (now - created_at).days
-                # Only evaluate if dates are logically consistent and defense is in the future
                 if total_days > 0 and passed_days >= 0:
                     expected = min(100.0, passed_days / total_days * 100)
                     gap = expected - topic.progress
@@ -2237,12 +2116,10 @@ class RiskService:
                         factors.append({'factor': 'progress_lag', 'severity': 'high',
                                         'message': f"Progress kutilganidan {gap:.0f}% orqada"})
                     elif gap < -20:
-                        # BONUS: Being ahead of schedule (reduce risk)
                         risk_score = max(0, risk_score - 15)
                         factors.append({'factor': 'ahead_of_schedule', 'severity': 'positive',
                                         'message': f"Progress rejalashtirilgandan {abs(gap):.0f}% oldinroq"})
 
-            # Factor 2: Topic status
             if topic.status.value == 'draft':
                 risk_score += 15
                 factors.append({'factor': 'not_submitted', 'severity': 'medium',
@@ -2257,19 +2134,16 @@ class RiskService:
                     }
                 )
 
-            # Factor 3: Stage completion
             stages = topic.stages
             if stages:
                 approved_cnt = sum(1 for s in stages if s.status.value == 'approved')
                 total_cnt = len(stages)
                 rate = approved_cnt / total_cnt
                 
-                # Check for CURRENTLY overdue (not yet completed) stages only
                 overdue_uncompleted = [s for s in stages
                            if s.deadline and make_aware(s.deadline) < now 
                            and s.status.value not in ('approved', 'submitted')]
                 
-                # Penalty for low completion rate
                 if rate < 0.25:
                     risk_score += 25
                     factors.append({'factor': 'low_stage_completion', 'severity': 'high',
@@ -2279,12 +2153,10 @@ class RiskService:
                     factors.append({'factor': 'low_stage_completion', 'severity': 'medium',
                                     'message': f"{approved_cnt}/{total_cnt} bosqich tasdiqlangan"})
                 elif rate >= 0.8:
-                    # BONUS: Most stages completed
                     risk_score = max(0, risk_score - 10)
                     factors.append({'factor': 'high_stage_completion', 'severity': 'positive',
                                     'message': f"{approved_cnt}/{total_cnt} bosqich tasdiqlangan - yaxshi natiја"})
                 
-                # Penalty ONLY for uncompleted overdue stages (completed ones shouldn't penalize)
                 if overdue_uncompleted:
                     add = min(len(overdue_uncompleted) * 8, 24)
                     risk_score += add
@@ -2295,7 +2167,6 @@ class RiskService:
                 factors.append({'factor': 'no_stages', 'severity': 'medium',
                                 'message': "Bosqichlar aniqlanmagan"})
 
-            # Factor 4: Task completion
             if tasks:
                 done_cnt = sum(1 for t in tasks if t.is_done)
                 task_rate = done_cnt / len(tasks)
@@ -2304,14 +2175,11 @@ class RiskService:
                     factors.append({'factor': 'low_task_completion', 'severity': 'medium',
                                     'message': f"Vazifalar {task_rate * 100:.0f}% bajarilgan"})
                 elif task_rate >= 0.7:
-                    # BONUS: Most tasks completed
                     risk_score = max(0, risk_score - 5)
                     factors.append({'factor': 'high_task_completion', 'severity': 'positive',
                                     'message': f"Vazifalar {task_rate * 100:.0f}% bajarilgan"})
 
-            # Factor 5: Meeting frequency
             if len(meetings) >= 4:
-                # BONUS: Regular meetings with supervisor
                 risk_score = max(0, risk_score - 5)
                 factors.append({'factor': 'regular_meetings', 'severity': 'positive',
                                 'message': f"Supervisor bilan {len(meetings)} ta uchrashuv o'tkazilgan"})
@@ -2427,16 +2295,13 @@ class RiskService:
             .join(DiplomaTopic, RiskAssessment.topic_id == DiplomaTopic.id)
         )
 
-        # Role-based filtering
         if user.role == UserRole.SUPERVISOR:
             if not user.supervisor_profile:
                 return []
-            # Supervisor faqat o'z o'quvchilari mavzularini ko'radi
             q = q.where(DiplomaTopic.supervisor_id == user.supervisor_profile.id)
         elif user.role == UserRole.STUDENT:
             if not user.student_profile:
                 return []
-            # Student faqat o'z mavzusini ko'radi
             q = q.where(DiplomaTopic.student_id == user.student_profile.id)
         elif user.role not in (UserRole.ADMIN, UserRole.KAFEDRA_HEAD):
             raise HTTPException(status_code=403, detail="Ruxsat yo'q")
@@ -2468,7 +2333,6 @@ class RiskService:
         - STUDENT: faqat o'z mavzusiga ruxsat
         - ADMIN/KAFEDRA_HEAD: barcha mavzularga ruxsat
         """
-        # Get topic to check ownership
         topic_res = await db.execute(
             select(DiplomaTopic).where(DiplomaTopic.id == topic_id)
         )
@@ -2476,7 +2340,6 @@ class RiskService:
         if not topic:
             raise HTTPException(status_code=404, detail="Mavzu topilmadi")
 
-        # Role-based access check
         if user.role == UserRole.SUPERVISOR:
             if not user.supervisor_profile or topic.supervisor_id != user.supervisor_profile.id:
                 raise HTTPException(status_code=403, detail="Faqat o'z o'quvchilari mavzularining risk'ini ko'rishingiz mumkin")

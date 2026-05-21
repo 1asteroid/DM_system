@@ -1,6 +1,5 @@
 import axios from 'axios'
 
-// Storage helper - handle Edge privacy mode issues
 const storage = {
   getItem: (key) => {
     try {
@@ -65,7 +64,6 @@ api.interceptors.response.use(
   }
 )
 
-// ── Auth ───────────────────────────────────────
 export const authApi = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
@@ -74,7 +72,6 @@ export const authApi = {
   updateProfile: (data) => api.patch('/auth/profile', data),
 }
 
-// ── Topics ────────────────────────────────────
 export const topicsApi = {
   list: (params) => api.get('/topics', { params }),
   get: (id) => api.get(`/topics/${id}`),
@@ -85,7 +82,6 @@ export const topicsApi = {
   approve: (id, data = null) => api.post(`/topics/${id}/approve`, data),
   reject: (id, data) => api.post(`/topics/${id}/reject`, data),
   assignSupervisor: (id, data) => api.post(`/topics/${id}/assign-supervisor`, data),
-  // Catalog
   getCatalog: (params) => api.get('/topics/catalog', { params }),
   createCatalog: (data) => api.post('/topics/catalog', data),
   selectCatalog: (id) => api.post(`/topics/catalog/${id}/select`),
@@ -93,7 +89,6 @@ export const topicsApi = {
   propose: (data) => api.post('/topics/propose', data),
 }
 
-// ── Stages ────────────────────────────────────
 export const stagesApi = {
   list: (topicId) => api.get(`/topics/${topicId}/stages`),
   create: (topicId, data) => api.post(`/topics/${topicId}/stages`, data),
@@ -104,7 +99,6 @@ export const stagesApi = {
   start: (topicId, stageId) => api.post(`/topics/${topicId}/stages/${stageId}/start`),
 }
 
-// ── Files ─────────────────────────────────────
 export const filesApi = {
   list: (topicId, stageId) => api.get(`/topics/${topicId}/files${stageId ? `?stage_id=${stageId}` : ''}`),
   upload: (topicId, formData, stageId) =>
@@ -127,7 +121,6 @@ export const filesApi = {
   },
 }
 
-// ── Tasks ─────────────────────────────────────
 export const tasksApi = {
   list: (topicId) => api.get(`/topics/${topicId}/tasks`),
   create: (topicId, data) => api.post(`/topics/${topicId}/tasks`, data),
@@ -135,7 +128,6 @@ export const tasksApi = {
   delete: (topicId, taskId) => api.delete(`/topics/${topicId}/tasks/${taskId}`),
 }
 
-// ── Meetings ──────────────────────────────────
 export const meetingsApi = {
   listAll: () => api.get('/meetings'),
   list: (topicId) => api.get(`/meetings/topic/${topicId}`),
@@ -145,14 +137,12 @@ export const meetingsApi = {
   delete: (id) => api.delete(`/meetings/${id}`),
 }
 
-// ── Notifications ─────────────────────────────
 export const notificationsApi = {
   list: () => api.get('/notifications'),
   markRead: (id) => api.post(`/notifications/${id}/read`),
   markAllRead: () => api.post('/notifications/read-all'),
 }
 
-// ── Messages (contacts list) ───────────────────
 export const messagesContactsApi = {
   contacts: () => api.get('/messages/contacts'),
   conversation: (userId) => api.get(`/messages/conversation/${userId}`),
@@ -163,26 +153,22 @@ export const messagesContactsApi = {
   sendSupervisorGroup: (data) => api.post('/messages/supervisor-group', data),
 }
 
-// ── Analysis ──────────────────────────────────
 export const analysisApi = {
   analyzeText: (data) => api.post('/analysis/text', data),
   getTextQuality: (topicId) => api.get(`/analysis/topic/${topicId}`),
 }
 
-// ── Risk ──────────────────────────────────────
 export const riskApi = {
   assess: (topicId) => api.post(`/risk/assess/${topicId}`),
   list: () => api.get('/risk/assessments'),
   get: (topicId) => api.get(`/risk/assessment/${topicId}`),
 }
 
-// ── Reports ───────────────────────────────────
 export const reportsApi = {
   dashboard: () => api.get('/reports/dashboard'),
   analytics: () => api.get('/reports/analytics'),
 }
 
-// ── Users ─────────────────────────────────────
 export const usersApi = {
   list: (role) => api.get('/users', { params: role ? { role } : {} }),
   supervisors: () => api.get('/users/supervisors'),
@@ -191,7 +177,6 @@ export const usersApi = {
   mySupervisor: () => api.get('/users/my-supervisor'),
   create: (data) => api.post('/users', data),
   deactivate: (id) => api.patch(`/users/${id}/deactivate`),
-  // Admin endpoints
   kafedras: () => api.get('/users/admin/kafedras'),
   groups: () => api.get('/users/admin/groups'),
 }

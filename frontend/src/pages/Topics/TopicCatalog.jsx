@@ -13,7 +13,6 @@ const inputCls =
   'placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all'
 const labelCls = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5'
 
-// ── Countdown chip ─────────────────────────────────────────────────────────
 function Deadline({ iso }) {
   if (!iso) return null
   const diff = new Date(iso) - Date.now()
@@ -32,7 +31,6 @@ function Deadline({ iso }) {
   )
 }
 
-// ── Catalog card ───────────────────────────────────────────────────────────
 function CatalogCard({ topic, onSelect, isStudent, selecting }) {
   const expired = topic.selection_deadline && new Date(topic.selection_deadline) < Date.now()
   return (
@@ -80,7 +78,6 @@ function CatalogCard({ topic, onSelect, isStudent, selecting }) {
   )
 }
 
-// ── Create catalog form (kafedra_head only) ────────────────────────────────
 function CreateCatalogForm({ onCreated }) {
   const [form, setForm] = useState({
     title: '', title_en: '', description: '',
@@ -186,7 +183,6 @@ function CreateCatalogForm({ onCreated }) {
   )
 }
 
-// ── Auto-assign panel ──────────────────────────────────────────────────────
 function AutoAssignPanel() {
   const [year, setYear] = useState(`${new Date().getFullYear()}-${new Date().getFullYear() + 1}`)
   const [loading, setLoading] = useState(false)
@@ -231,7 +227,6 @@ function AutoAssignPanel() {
   )
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
 export default function TopicCatalog() {
   const navigate = useNavigate()
   const { isRole, user } = useAuthStore()
@@ -260,7 +255,6 @@ export default function TopicCatalog() {
 
   useEffect(() => { fetchCatalog() }, [includeTaken, page])
 
-  // Real-time: remove topic from list when another student selects it
   useEffect(() => {
     const token = localStorage.getItem('access_token')
     if (!token) return

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { topicsApi, stagesApi, filesApi, tasksApi, usersApi } from '../../api/api'
 import toast from 'react-hot-toast'
@@ -76,17 +76,15 @@ export default function TopicDetail() {
       const [t, s, f, tk] = await Promise.all([
         topicsApi.get(id),
         stagesApi.list(id),
-        filesApi.list(id),  // Supervisor materials (stage_id = null)
+        filesApi.list(id),
         tasksApi.list(id),
       ])
       setTopic(t.data)
       setStages(s.data)
       
-      // Supervisor materials + student files for each stage
       let allFiles = f.data || []
       console.log('Supervisor materials:', allFiles)
       
-      // Fetch student files for each stage
       if (s.data && s.data.length > 0) {
         for (const stage of s.data) {
           try {
@@ -183,8 +181,6 @@ export default function TopicDetail() {
     : topic.progress >= 40 ? 'from-blue-400 to-indigo-500'
     : 'from-slate-300 to-slate-400'
 
-  // Joriy user shu mavzuning supervisorimikan
-  // Backend supervisor_user_id qaytarishi kerak aniqlash uchun
   const isTopicSupervisor = isRole('supervisor') && (
     user?.supervisor_profile_id === topic.supervisor_id ||
     user?.id === topic.supervisor_user_id
@@ -347,7 +343,7 @@ export default function TopicDetail() {
                       <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                         <Clock size={10} /> {new Date(stage.deadline).toLocaleDateString('uz-UZ')}
                         {new Date(stage.deadline) < new Date() && stage.status !== 'approved' && (
-                          <span className="text-red-400 font-semibold ml-1">· Muddati o'tdi</span>
+                          <span className="text-red-400 font-semibold ml-1">� Muddati o'tdi</span>
                         )}
                       </p>
                     )}
@@ -388,7 +384,7 @@ export default function TopicDetail() {
               {isRole('student') && (stage.status === 'submitted' || stage.status === 'in_progress') && (
                 <p className="mt-3 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 flex items-center gap-2">
                   <CheckCircle size={12} /> Ko'rib chiqishga yuborildi
-                  {stage.submitted_at && ` · ${new Date(stage.submitted_at).toLocaleDateString('uz-UZ')}`}
+                  {stage.submitted_at && ` � ${new Date(stage.submitted_at).toLocaleDateString('uz-UZ')}`}
                 </p>
               )}
               
@@ -447,8 +443,8 @@ export default function TopicDetail() {
                   <p className="text-sm font-semibold text-gray-800">{f.file_name}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
                     v{f.version}
-                    {f.file_type && <> · <span className="uppercase">{f.file_type}</span></>}
-                    {f.file_size ? ` · ${(f.file_size / 1024).toFixed(1)} KB` : ''}
+                    {f.file_type && <> � <span className="uppercase">{f.file_type}</span></>}
+                    {f.file_size ? ` � ${(f.file_size / 1024).toFixed(1)} KB` : ''}
                   </p>
                 </div>
               </div>
@@ -624,7 +620,7 @@ export default function TopicDetail() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Tartib â„–</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Tartib №</label>
                 <input name="order" type="number" defaultValue={stages.length + 1} className={inputCls} />
               </div>
               <div>

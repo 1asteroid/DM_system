@@ -60,21 +60,17 @@ export default function MyStudents() {
         ])
         setStudents(studentsRes.data)
 
-        // Risk data'ni topic_id bo'yicha indexlash
         const riskMap = {}
         risksRes.data.forEach(risk => {
           riskMap[risk.topic_id] = risk
         })
 
-        // Mavjud bo'lmagan risk assessment'larni yaratish
         const missingRisks = studentsRes.data.filter(s => !riskMap[s.topic_id])
         if (missingRisks.length > 0) {
-          // Barcha bo'lmagan risk'larni yaratish
           await Promise.all(
             missingRisks.map(s => riskApi.assess(s.topic_id).catch(() => null))
           )
 
-          // Qayta 500ms kutib risk'larni yuklash
           await new Promise(r => setTimeout(r, 500))
           const updatedRisks = await riskApi.list()
           updatedRisks.data.forEach(risk => {

@@ -20,10 +20,8 @@ async def list_files(
 ):
     """Get files for topic: supervisor materials (stage_id=null) or student submissions per stage"""
     if stage_id:
-        # O'quvchi fayllarini stage bo'yicha
         return await file_service.get_stage_student_files(stage_id, db)
     else:
-        # Rahbar umumiy fayllarini
         return await file_service.get_list(topic_id, db)
 
 

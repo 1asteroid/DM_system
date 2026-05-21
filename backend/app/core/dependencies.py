@@ -23,7 +23,6 @@ async def get_current_user(
     if not sub:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token yaroqsiz")
 
-    # ✅ Eager load relationships to avoid lazy loading in async context
     result = await db.execute(
         select(User)
         .where(User.id == int(sub))

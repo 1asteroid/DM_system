@@ -7,15 +7,11 @@ from sqlalchemy.orm import relationship
 
 from ..core.database import Base
 
-
-# ── ENUMLAR ──────────────────────────────────────────────────────────────────
-
 class UserRole(str, PyEnum):
     ADMIN        = "admin"
     KAFEDRA_HEAD = "kafedra_head"
     SUPERVISOR   = "supervisor"
     STUDENT      = "student"
-
 
 class TopicStatus(str, PyEnum):
     DRAFT    = "draft"
@@ -31,7 +27,6 @@ class StageStatus(str, PyEnum):
     APPROVED    = "approved"
     REJECTED    = "rejected"
 
-
 class MeetingStatus(str, PyEnum):
     PLANNED   = "planned"
     COMPLETED = "completed"
@@ -45,9 +40,6 @@ class NotificationType(str, PyEnum):
     COMMENT_ADDED     = "comment_added"
     MEETING_SCHEDULED = "meeting_scheduled"
     STATUS_CHANGED    = "status_changed"
-
-
-# ── TASHKILOT ─────────────────────────────────────────────────────────────────
 
 class Faculty(Base):
     __tablename__ = "faculties"
@@ -90,9 +82,6 @@ class Group(Base):
     created_at   = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     direction    = relationship("Direction", back_populates="groups")
     students     = relationship("StudentProfile", back_populates="group")
-
-
-# ── FOYDALANUVCHILAR ──────────────────────────────────────────────────────────
 
 class User(Base):
     __tablename__ = "users"
@@ -142,7 +131,6 @@ class SupervisorProfile(Base):
     diploma_topics = relationship("DiplomaTopic", back_populates="supervisor")
 
 
-# ── DIPLOM MAVZUSI ────────────────────────────────────────────────────────────
 
 class DiplomaTopic(Base):
     __tablename__ = "diploma_topics"
@@ -159,7 +147,6 @@ class DiplomaTopic(Base):
     reject_reason      = Column(Text)
     approved_at        = Column(DateTime(timezone=True))
     defense_date       = Column(DateTime(timezone=True))
-    # Catalog / template fields
     is_template        = Column(Boolean, default=False)
     selection_deadline = Column(DateTime(timezone=True), nullable=True)
     created_by_id      = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -175,9 +162,6 @@ class DiplomaTopic(Base):
     tasks      = relationship("Task", back_populates="topic")
     ai_analyses     = relationship("AIAnalysis",     back_populates="topic", cascade="all, delete-orphan")
     risk_assessment = relationship("RiskAssessment", back_populates="topic", uselist=False, cascade="all, delete-orphan")
-
-
-# ── BOSQICHLAR ────────────────────────────────────────────────────────────────
 
 class DiplomaStage(Base):
     __tablename__ = "diploma_stages"
@@ -198,7 +182,6 @@ class DiplomaStage(Base):
     files = relationship("DiplomaFile", back_populates="stage")
 
 
-# ── FAYLLAR ───────────────────────────────────────────────────────────────────
 
 class DiplomaFile(Base):
     __tablename__ = "diploma_files"
@@ -231,7 +214,6 @@ class FileComment(Base):
     author     = relationship("User")
 
 
-# ── VAZIFALAR ─────────────────────────────────────────────────────────────────
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -248,7 +230,6 @@ class Task(Base):
     creator     = relationship("User")
 
 
-# ── UCHRASHUVLAR ──────────────────────────────────────────────────────────────
 
 class Meeting(Base):
     __tablename__ = "meetings"
@@ -277,7 +258,6 @@ class MeetingAttendee(Base):
     user       = relationship("User")
 
 
-# ── AI TAHLIL ─────────────────────────────────────────────────────────────────
 
 class AIAnalysis(Base):
     __tablename__ = "ai_analyses"
@@ -304,7 +284,6 @@ class RiskAssessment(Base):
     topic = relationship("DiplomaTopic", back_populates="risk_assessment", uselist=False)
 
 
-# ── XABARLAR ──────────────────────────────────────────────────────────────────
 
 class Message(Base):
     __tablename__ = "messages"
@@ -319,7 +298,6 @@ class Message(Base):
     receiver    = relationship("User", foreign_keys=[receiver_id])
 
 
-# ── BILDIRISHNOMALAR ──────────────────────────────────────────────────────────
 
 class Notification(Base):
     __tablename__ = "notifications"
@@ -334,7 +312,6 @@ class Notification(Base):
     user       = relationship("User", back_populates="notifications")
 
 
-# ── AUDIT LOG ─────────────────────────────────────────────────────────────────
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

@@ -199,7 +199,6 @@ async def create_realistic_data(
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     async with SessionLocal() as session:
-        # ignore the demo user created by init_db() when deciding to early-exit
         existing_users = (await session.execute(
             select(func.count(User.id)).where(User.email != "student01@diplom.uz")
         )).scalar_one()
@@ -402,10 +401,7 @@ async def create_realistic_data(
                 else:
                     rejected_topic_count += 1
 
-                # Draft / pending / rejected topics stop at topic level.
-                # Only approved topics get a supervisor, stages, tasks, meetings and file workflow.
                 if topic_status != TopicStatus.APPROVED:
-                    # Keep one lightweight real file for topic-level upload testing
                     ext = random.choice(["pdf", "docx", "txt"])
                     body = (
                         f"Mavzu: {topic.title}\n"
@@ -429,7 +425,6 @@ async def create_realistic_data(
                     ))
                     file_count += 1
 
-                    # Minimal conversation for draft topics, useful for UI tests
                     session.add(Message(
                         sender_id=student_user.id,
                         receiver_id=random.choice(heads).id,
@@ -508,12 +503,8 @@ async def create_realistic_data(
 
                 await session.flush()
 
-                # File extensions to use
                 exts = ["pdf", "docx", "txt"]
 
-                # ===== SUPERVISOR PROVIDED FILES (stage'siz, umumiy adabiyotlar/qo'llanmalar) =====
-                # Supervisor faqat bir marta umumiy fayllarni qo'shadi (topic level, hamma stage uchun)
-                # 5-6 ta adabiyot/qo'llanma
                 for sp_fidx in range(random.randint(5, 6)):
                     ext = random.choice(exts)
                     body = (
@@ -541,11 +532,8 @@ async def create_realistic_data(
                     ))
                     file_count += 1
 
-                # ===== STUDENT SUBMITTED FILES (har stage uchun o'z ishlarini) =====
                 for stage in stages:
-                    # Agar stage approved, submitted yoki in_progress bo'lsa, talaba fayl yuklagan deb aytamiz
                     if stage.status in (StageStatus.APPROVED, StageStatus.SUBMITTED, StageStatus.IN_PROGRESS):
-                        # Talaba har stage uchun FAQAT BITTA fayl yuklaydi
                         ext = random.choice(exts)
                         body = (
                             f"[STUDENT WORK]\n"

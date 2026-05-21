@@ -11,7 +11,6 @@ from sqlalchemy.orm import sessionmaker
 from app.models.models import DiplomaTopic
 from app.core.config import settings
 
-# Database connection
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=True,
@@ -29,7 +28,6 @@ async def cleanup_duplicate_topics():
     - 0 ta template (is_template=True bo'lmasligi kerak)
     """
     async with AsyncSessionLocal() as db:
-        # 1. is_template=True bo'lgan lekin student_id null bo'lmagan topiclarni topish
         result = await db.execute(
             select(DiplomaTopic).where(
                 DiplomaTopic.is_template == True,
@@ -52,7 +50,6 @@ async def cleanup_duplicate_topics():
         else:
             print("✅ No duplicates found - database is clean!")
         
-        # 2. Verification - har bir talaba faqat 1 ta active mavzusi borligini tekshirish
         result = await db.execute(
             select(DiplomaTopic).where(
                 DiplomaTopic.student_id != None,
@@ -61,7 +58,6 @@ async def cleanup_duplicate_topics():
         )
         all_student_topics = result.scalars().all()
         
-        # Group by student_id
         from collections import defaultdict
         by_student = defaultdict(list)
         for topic in all_student_topics:

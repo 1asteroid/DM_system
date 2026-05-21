@@ -59,7 +59,6 @@ function AddUserModal({ onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    // Validation
     if (form.role === 'student' && !form.kafedra_id) {
       toast.error("Talabalar uchun kafedra tanlang")
       return
@@ -285,7 +284,6 @@ export default function UsersPage() {
             <p>Foydalanuvchilar topilmadi</p>
           </div>
         ) : isMobile ? (
-          // Mobile card view
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px' }}>
             {filtered.map(u => (
               <div key={u.id} style={{ background: '#f8fafc', borderRadius: '12px', padding: '14px', border: '1px solid #e8ecf4' }}>
@@ -314,7 +312,6 @@ export default function UsersPage() {
             ))}
           </div>
         ) : (
-          // Desktop table view
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>

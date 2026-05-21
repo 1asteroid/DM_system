@@ -181,9 +181,6 @@ async def deactivate_user(
     return UserResponse.model_validate(user)
 
 
-# ═════════════════════════════════════════════════════
-# KAFEDRA & GROUP ENDPOINTS (for admin user creation)
-# ═════════════════════════════════════════════════════
 
 @router.get("/admin/kafedras", response_model=list[KafedraResponse])
 async def get_kafedras(

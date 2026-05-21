@@ -66,14 +66,11 @@ export default function Messages() {
     } catch { /* silent */ }
   }, [])
 
-  // Load supervisor group info
   const loadSupervisorGroup = useCallback(async () => {
     try {
       if (user?.role === 'supervisor') {
-        // Supervisor's own group (their user_id is the group ID)
         setSupervisorGroup({ supervisor_user_id: user.id, name: `${user.full_name} guruhi` })
       } else if (user?.role === 'student') {
-        // Student: find their supervisor
         const { data } = await usersApi.mySupervisor()
         if (data?.user_id) {
           setSupervisorGroup({ supervisor_user_id: data.user_id, name: `${data.full_name} guruhi` })
@@ -127,7 +124,6 @@ export default function Messages() {
     finally { setSending(false) }
   }, [text, selected])
 
-  // User search for new conversations
   const handleUserSearch = useCallback(async (q) => {
     setSearchQuery(q)
     if (q.trim().length < 2) { setSearchResults([]); return }
@@ -143,20 +139,17 @@ export default function Messages() {
     setShowSearch(false)
     setSearchQuery('')
     setSearchResults([])
-    // Add to contacts list if not already there
     setContacts(prev => {
       if (prev.some(c => c.user_id === foundUser.id)) return prev
       return [{ user_id: foundUser.id, full_name: foundUser.full_name, last_message: '', last_message_at: new Date().toISOString(), unread_count: 0 }, ...prev]
     })
     setSelected({ type: 'direct', user_id: foundUser.id, full_name: foundUser.full_name })
     setMessages([])
-    // Load existing conversation
     messagesContactsApi.conversation(foundUser.id)
       .then(({ data }) => setMessages(data))
       .catch(() => {})
   }, [])
 
-  // WebSocket connection
   const connectWs = useCallback(() => {
     const token = localStorage.getItem('access_token')
     if (!token) return
@@ -240,7 +233,6 @@ export default function Messages() {
     }
 
     ws.onclose = () => {
-      // cPanel/Passenger often blocks WebSocket; production uses reconnect + polling fallback.
       scheduleReconnect()
     }
     ws.onerror = () => {

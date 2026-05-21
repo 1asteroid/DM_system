@@ -1,10 +1,8 @@
-#!/usr/bin/env python3
 """
 Available supervisors endpoint
 Mavzu olmagan yoki joy bor supervisorlarni olish
 """
 
-# backend/app/api/supervisors.py
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, func
@@ -29,7 +27,6 @@ async def get_available_supervisors(
     - To'lgan supervisorlar chiqmaydi
     """
 
-    # Supervisor-lar bilan ularning student count-i
     supervisor_count_subquery = (
         select(
             DiplomaTopic.supervisor_id,
@@ -39,7 +36,6 @@ async def get_available_supervisors(
         .group_by(DiplomaTopic.supervisor_id)
     ).subquery()
 
-    # Supervisorlarni joy bilan olish
     result = await db.execute(
         select(User).where(
             User.role == UserRole.SUPERVISOR,
@@ -50,7 +46,6 @@ async def get_available_supervisors(
     )
     supervisors = result.scalars().all()
 
-    # Count query-dan supervisor counts olish
     count_result = await db.execute(
         select(supervisor_count_subquery)
     )
@@ -59,7 +54,6 @@ async def get_available_supervisors(
         if row.supervisor_id:
             count_map[row.supervisor_id] = row.student_count
 
-    # Available supervisors filter qilish
     available = []
     for sup in supervisors:
         if sup.supervisor_profile:
@@ -104,7 +98,6 @@ async def get_supervisor_info(
     if not supervisor:
         return {"error": "Supervisor topilmadi"}
 
-    # Count students
     count_result = await db.execute(
         select(func.count(DiplomaTopic.id)).where(
             DiplomaTopic.supervisor_id == supervisor.supervisor_profile.id,
