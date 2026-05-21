@@ -212,6 +212,8 @@ class StageShort(BaseModel):
     status: StageStatus
     weight: float
     deadline: datetime | None = None
+    submitted_at: datetime | None = None
+    comment: str | None = None
     model_config = {"from_attributes": True}
 
 

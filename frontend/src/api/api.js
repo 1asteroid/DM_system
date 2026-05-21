@@ -72,7 +72,7 @@ export const stagesApi = {
 
 // ── Files ─────────────────────────────────────
 export const filesApi = {
-  list: (topicId) => api.get(`/topics/${topicId}/files`),
+  list: (topicId, stageId) => api.get(`/topics/${topicId}/files${stageId ? `?stage_id=${stageId}` : ''}`),
   upload: (topicId, formData, stageId) =>
     api.post(`/topics/${topicId}/files${stageId ? `?stage_id=${stageId}` : ''}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

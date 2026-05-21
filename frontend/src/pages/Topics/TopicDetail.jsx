@@ -76,20 +76,20 @@ export default function TopicDetail() {
       const [t, s, f, tk] = await Promise.all([
         topicsApi.get(id),
         stagesApi.list(id),
-        filesApi.list(id),
+        filesApi.list(id),  // Supervisor materials (stage_id = null)
         tasksApi.list(id),
       ])
       setTopic(t.data)
       setStages(s.data)
       
-      // Supervisor materials + student files
+      // Supervisor materials + student files for each stage
       let allFiles = f.data || []
       
       // Fetch student files for each stage
       if (s.data && s.data.length > 0) {
         for (const stage of s.data) {
           try {
-            const { data: stageFiles } = await filesApi.list(id, { params: { stage_id: stage.id } })
+            const { data: stageFiles } = await filesApi.list(id, stage.id)
             allFiles = allFiles.concat(stageFiles || [])
           } catch {
             // Ignore stage file fetch errors
@@ -379,6 +379,15 @@ export default function TopicDetail() {
                   {stage.comment}
                 </p>
               )}
+              
+              {/* Submission confirmation for students */}
+              {isRole('student') && (stage.status === 'submitted' || stage.status === 'in_progress') && (
+                <p className="mt-3 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 flex items-center gap-2">
+                  <CheckCircle size={12} /> Ko'rib chiqishga yuborildi
+                  {stage.submitted_at && ` · ${new Date(stage.submitted_at).toLocaleDateString('uz-UZ')}`}
+                </p>
+              )}
+              
               {stageFiles.length > 0 && (
                 <div className="mt-3 space-y-1.5">
                   {stageFiles.map(f => (
