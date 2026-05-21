@@ -81,7 +81,23 @@ export default function TopicDetail() {
       ])
       setTopic(t.data)
       setStages(s.data)
-      setFiles(f.data)
+      
+      // Supervisor materials + student files
+      let allFiles = f.data || []
+      
+      // Fetch student files for each stage
+      if (s.data && s.data.length > 0) {
+        for (const stage of s.data) {
+          try {
+            const { data: stageFiles } = await filesApi.list(id, { params: { stage_id: stage.id } })
+            allFiles = allFiles.concat(stageFiles || [])
+          } catch {
+            // Ignore stage file fetch errors
+          }
+        }
+      }
+      
+      setFiles(allFiles)
       setTasks(tk.data)
     } catch {
       toast.error('Ma\'lumot yuklashda xatolik')
@@ -178,7 +194,7 @@ export default function TopicDetail() {
   ]
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl mx-auto px-4 sm:px-0">
 
       {/* Back */}
       <button
@@ -226,11 +242,11 @@ export default function TopicDetail() {
         </div>
 
         {/* Action bar */}
-        <div className="flex items-center gap-2 flex-wrap px-6 py-3.5 bg-gray-50/60 border-t border-gray-100">
+        <div className="flex items-center gap-2 flex-wrap px-4 sm:px-6 py-3 sm:py-3.5 bg-gray-50/60 border-t border-gray-100">
           {topic.status === 'draft' && isRole('student') && (
             <button
               onClick={async () => { await topicsApi.submit(id); toast.success('Yuborildi'); load() }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm transition-all text-xs sm:text-sm"
             >
               Tasdiqlashga yuborish
             </button>
@@ -263,19 +279,20 @@ export default function TopicDetail() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white border border-gray-100 shadow-sm p-1 rounded-2xl w-fit">
+      <div className="flex gap-1 bg-white border border-gray-100 shadow-sm p-1 rounded-2xl w-fit overflow-x-auto">
         {TABS.map(({ key, label, icon: Icon, count }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            className={`inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
               tab === key
                 ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-sm'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
             <Icon size={14} />
-            {label}
+            <span className="hidden sm:inline">{label}</span>
+            <span className="sm:hidden text-xs">{label.substring(0, 3)}</span>
             <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${tab === key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400'}`}>
               {count}
             </span>
@@ -309,8 +326,8 @@ export default function TopicDetail() {
               const canReview = stage.status === 'submitted' && (isTopicSupervisor || isRole('admin', 'kafedra_head'))
               return (
             <div key={stage.id} className={`bg-white rounded-2xl border shadow-sm p-4 transition-all ${isLocked ? 'border-gray-100 opacity-50' : 'border-gray-100 hover:shadow-md'}`}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-start justify-between gap-3 flex-col sm:flex-row">
+                <div className="flex items-center gap-3 min-w-0 w-full sm:auto">
                   <div className={`w-8 h-8 flex-shrink-0 rounded-xl flex items-center justify-center text-xs font-bold ${
                     isLocked ? 'bg-gray-100 text-gray-400' :
                     stage.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
@@ -320,7 +337,7 @@ export default function TopicDetail() {
                   }`}>
                     {isLocked ? <Lock size={12} /> : stage.status === 'approved' ? <CheckCircle size={12} /> : stage.order}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-semibold text-gray-900 text-sm truncate">{stage.name}</p>
                     {stage.deadline && (
                       <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
@@ -332,7 +349,7 @@ export default function TopicDetail() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:flex-shrink-0">
                   {stage.status !== 'submitted' && (
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${STAGE_STATUS_STYLES[stage.status]}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${STAGE_STATUS_DOT[stage.status]}`} />
