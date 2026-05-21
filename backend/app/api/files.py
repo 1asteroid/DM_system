@@ -14,11 +14,17 @@ file_service = FileServiceClass()
 @router.get("/{topic_id}/files")
 async def list_files(
     topic_id: int,
+    stage_id: int = Query(None),  # Agar stage_id bo'lsa, o'quvchi fayllarini qaytarish
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get files for topic"""
-    return await file_service.get_list(topic_id, db)
+    """Get files for topic: supervisor materials (stage_id=null) or student submissions per stage"""
+    if stage_id:
+        # O'quvchi fayllarini stage bo'yicha
+        return await file_service.get_stage_student_files(stage_id, db)
+    else:
+        # Rahbar umumiy fayllarini
+        return await file_service.get_list(topic_id, db)
 
 
 @router.post("/{topic_id}/files")
