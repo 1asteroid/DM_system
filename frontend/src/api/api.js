@@ -1,9 +1,43 @@
 import axios from 'axios'
 
+// Storage helper - handle Edge privacy mode issues
+const storage = {
+  getItem: (key) => {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return sessionStorage.getItem(key)
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      localStorage.setItem(key, value)
+    } catch {
+      sessionStorage.setItem(key, value)
+    }
+  },
+  removeItem: (key) => {
+    try {
+      localStorage.removeItem(key)
+    } catch {}
+    try {
+      sessionStorage.removeItem(key)
+    } catch {}
+  },
+  clear: () => {
+    try {
+      localStorage.clear()
+    } catch {}
+    try {
+      sessionStorage.clear()
+    } catch {}
+  }
+}
+
 const api = axios.create({ baseURL: '/api/v1' })
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
+  const token = storage.getItem('access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -16,14 +50,14 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
       original._retry = true
       try {
-        const refresh = localStorage.getItem('refresh_token')
+        const refresh = storage.getItem('refresh_token')
         const { data } = await axios.post('/api/v1/auth/refresh', { refresh_token: refresh })
-        localStorage.setItem('access_token', data.access_token)
-        localStorage.setItem('refresh_token', data.refresh_token)
+        storage.setItem('access_token', data.access_token)
+        storage.setItem('refresh_token', data.refresh_token)
         original.headers.Authorization = `Bearer ${data.access_token}`
         return api(original)
       } catch {
-        localStorage.clear()
+        storage.clear()
         window.location.href = '/login'
       }
     }

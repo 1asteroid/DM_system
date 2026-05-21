@@ -226,6 +226,8 @@ class TopicResponse(BaseModel):
     academic_year: str
     progress: float
     supervisor_id: int | None = None
+    student_id: int | None = None
+    student_name: str | None = None
     defense_date: datetime | None
     approved_at: datetime | None
     reject_reason: str | None

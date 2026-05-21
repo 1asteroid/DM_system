@@ -47,6 +47,30 @@ def topics_keyboard(topics: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def students_keyboard(topics: list) -> InlineKeyboardMarkup:
+    """Supervisor uchun o'quvchilar ro'yxati (topics'dan o'quvchi nomi ostida gruplanadi)"""
+    seen_students = {}
+    for t in topics:
+        student_name = t.get('student_name') or 'Noma\'lum'
+        student_id = t.get('student_id') or 0
+        if student_id not in seen_students:
+            seen_students[student_id] = {
+                'name': student_name,
+                'topics_count': 0
+            }
+        seen_students[student_id]['topics_count'] += 1
+    
+    buttons = []
+    for student_id, info in seen_students.items():
+        btn_text = f"👤 {info['name']} ({info['topics_count']})"
+        buttons.append([InlineKeyboardButton(
+            text=btn_text,
+            callback_data=f"student:{student_id}"
+        )])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def topic_actions(topic_id: int, status: str) -> InlineKeyboardMarkup:
     btns = [[InlineKeyboardButton(text="📋 Bosqichlar", callback_data=f"stages:{topic_id}")]]
     if status == 'draft':

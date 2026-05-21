@@ -365,6 +365,10 @@ class TopicService:
             q = q.where(DiplomaTopic.status == status)
         if search:
             q = q.where(or_(DiplomaTopic.title.ilike(f"%{search}%"), DiplomaTopic.title_en.ilike(f"%{search}%")))
+        
+        # Eager load student relationship
+        q = q.options(joinedload(DiplomaTopic.student).joinedload(StudentProfile.user))
+        
         total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
         q = q.offset((page - 1) * page_size).limit(page_size).order_by(DiplomaTopic.created_at.desc())
         items = (await db.execute(q)).scalars().all()
@@ -383,6 +387,9 @@ class TopicService:
         for t in items:
             r = TopicResponse.model_validate(t)
             r.stages_submitted = submitted_counts.get(t.id, 0)
+            # Add student_name from the related student profile's user
+            if t.student and t.student.user:
+                r.student_name = t.student.user.full_name
             result.append(r)
         return TopicListResponse(total=total, page=page, page_size=page_size, items=result)
 

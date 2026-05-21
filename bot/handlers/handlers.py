@@ -6,7 +6,7 @@ from aiogram.types import Message, CallbackQuery
 
 from bot.services.api_client import api_client
 from bot.keyboards.keyboards import (
-    main_menu, topics_keyboard, topic_actions,
+    main_menu, topics_keyboard, topic_actions, students_keyboard,
     conversations_keyboard, risk_keyboard, contacts_action_keyboard,
 )
 
@@ -150,9 +150,9 @@ async def show_my_students(msg: Message):
         return await msg.answer("📭 Hozircha talabalar yo'q.")
 
     await msg.answer(
-        "👨‍🎓 *Talabalarim:*\n\nBatafsil ko'rish uchun tanlang 👇",
+        "👨‍🎓 *Talabalarim:*\n\nO'quvchini tanlash uchun bosing 👇",
         parse_mode="Markdown",
-        reply_markup=topics_keyboard(topics)
+        reply_markup=students_keyboard(topics)
     )
 
 
@@ -198,6 +198,35 @@ async def show_reports(msg: Message):
         f"📈 O'rtacha progress: *{stats['avg_progress']}%*"
     )
     await msg.answer(text, parse_mode="Markdown")
+
+
+@router.callback_query(F.data.startswith("student:"))
+async def show_student_topics(call: CallbackQuery):
+    """Show topics for selected student with progress and risk"""
+    student_id = int(call.data.split(":")[1])
+    topics = await api_client.get_topics(call.from_user.id)
+    if not topics:
+        return await call.answer("Mavzular topilmadi", show_alert=True)
+    
+    # Filter topics for this student
+    student_topics = [t for t in topics if t.get('student_id') == student_id]
+    if not student_topics:
+        return await call.answer("Bu o'quvchining mavzulari yo'q", show_alert=True)
+    
+    student_name = student_topics[0].get('student_name') or 'Noma\'lum'
+    progress_avg = sum(t.get('progress', 0) for t in student_topics) / len(student_topics)
+    
+    text = f"👤 *{student_name}*\n\n"
+    text += f"📈 O'rtacha Progress: *{progress_avg:.0f}%*\n"
+    text += f"\n📚 *Mavzular ({len(student_topics)}):*\n\n"
+    
+    for t in student_topics:
+        status_icon = STATUS_LABEL.get(t.get('status', ''), '📄')
+        text += f"{status_icon} {t['title'][:40]}\n   📈 {t.get('progress', 0):.0f}%\n\n"
+    
+    await call.message.edit_text(text, parse_mode="Markdown",
+                                  reply_markup=topics_keyboard(student_topics))
+    await call.answer()
 
 
 @router.callback_query(F.data.startswith("topic:"))
