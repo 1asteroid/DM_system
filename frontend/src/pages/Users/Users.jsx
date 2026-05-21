@@ -36,6 +36,13 @@ function AddUserModal({ onClose, onSuccess }) {
   const [kafedras, setKafedras] = useState([])
   const [groups, setGroups] = useState([])
   const [loadingData, setLoadingData] = useState(true)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   useEffect(() => {
     const loadData = async () => {
@@ -86,10 +93,10 @@ function AddUserModal({ onClose, onSuccess }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-      <div style={{ background: '#fff', borderRadius: '20px', padding: '32px', width: '500px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: isMobile ? '16px' : '0' }}>
+      <div style={{ background: '#fff', borderRadius: isMobile ? '16px' : '20px', padding: isMobile ? '24px' : '32px', width: isMobile ? '100%' : '500px', maxHeight: isMobile ? '95vh' : '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b', fontFamily: "'Sora',sans-serif" }}>Yangi foydalanuvchi</h3>
+          <h3 style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '700', color: '#1e293b', fontFamily: "'Sora',sans-serif" }}>Yangi foydalanuvchi</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px' }}><X size={20} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -179,6 +186,13 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const load = async () => {
     setLoading(true)
@@ -208,27 +222,27 @@ export default function UsersPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', fontFamily: "'DM Sans',sans-serif" }}>
       {showModal && <AddUserModal onClose={() => setShowModal(false)} onSuccess={load} />}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '12px' : '0' }}>
         <div>
-          <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#1e293b', fontFamily: "'Sora',sans-serif" }}>Foydalanuvchilar</h2>
+          <h2 style={{ fontSize: isMobile ? '20px' : '22px', fontWeight: '700', color: '#1e293b', fontFamily: "'Sora',sans-serif" }}>Foydalanuvchilar</h2>
           <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '3px' }}>Jami: {users.length} ta</p>
         </div>
         <button onClick={() => setShowModal(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-start' }}>
           <UserPlus size={16} /> Yangi foydalanuvchi
         </button>
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: '1', minWidth: '200px', maxWidth: '320px' }}>
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', flexDirection: isMobile ? 'column' : 'row' }}>
+        <div style={{ position: 'relative', flex: isMobile ? '1' : '1', minWidth: isMobile ? '100%' : '200px', maxWidth: isMobile ? '100%' : '320px' }}>
           <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Ism yoki email bo'yicha qidirish..."
-            style={{ ...S.input, paddingLeft: '36px' }} />
+            style={{ ...S.input, paddingLeft: '36px', width: '100%' }} />
         </div>
         <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
-          style={{ ...S.input, width: 'auto', cursor: 'pointer' }}>
+          style={{ ...S.input, width: isMobile ? '100%' : 'auto', cursor: 'pointer' }}>
           <option value="">Barcha rollar</option>
           <option value="student">Talabalar</option>
           <option value="supervisor">Ilmiy rahbarlar</option>
@@ -238,7 +252,7 @@ export default function UsersPage() {
       </div>
 
       {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: '12px' }}>
         {[
           { role: 'student', count: users.filter(u => u.role === 'student').length },
           { role: 'supervisor', count: users.filter(u => u.role === 'supervisor').length },
@@ -261,7 +275,7 @@ export default function UsersPage() {
         })}
       </div>
 
-      {/* Table */}
+      {/* Table / Card Grid */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e8ecf4', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '60px', color: '#94a3b8' }}>Yuklanmoqda...</div>
@@ -270,7 +284,37 @@ export default function UsersPage() {
             <Users size={40} style={{ marginBottom: '12px', opacity: 0.3 }} />
             <p>Foydalanuvchilar topilmadi</p>
           </div>
+        ) : isMobile ? (
+          // Mobile card view
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px' }}>
+            {filtered.map(u => (
+              <div key={u.id} style={{ background: '#f8fafc', borderRadius: '12px', padding: '14px', border: '1px solid #e8ecf4' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <User size={14} color="#6366f1" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</div>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <RoleBadge role={u.role} />
+                    <span style={{ display: 'inline-flex', padding: '3px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', background: u.is_active ? '#f0fdf4' : '#fef2f2', color: u.is_active ? '#22c55e' : '#ef4444' }}>
+                      {u.is_active ? 'Faol' : 'Nofaol'}
+                    </span>
+                  </div>
+                  <button onClick={() => handleToggleActive(u)}
+                    style={{ padding: '5px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: '500', color: u.is_active ? '#ef4444' : '#22c55e', whiteSpace: 'nowrap' }}>
+                    {u.is_active ? 'Bloklash' : 'Faollashtirish'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
+          // Desktop table view
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>

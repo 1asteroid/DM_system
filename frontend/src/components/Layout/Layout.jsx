@@ -63,6 +63,13 @@ export default function Layout() {
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const loadUnreadCount = async () => {
     try {
@@ -98,11 +105,23 @@ export default function Layout() {
         .nav-link:hover { background:#f1f5f9; color:#1e293b; }
         .nav-link.active { background:#eef2ff; color:#4f46e5; font-weight:600; }
         .nav-link.active svg { color:#4f46e5; }
+        @media (max-width: 767px) {
+          .sidebar-mobile { position:fixed; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99; transition:opacity 0.2s; }
+          .sidebar-mobile.hidden { display:none; }
+        }
       `}</style>
+
+      {/* Mobile overlay */}
+      {isMobile && collapsed === false && (
+        <div 
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 40 }}
+          onClick={() => setCollapsed(true)}
+        />
+      )}
 
       {/* Sidebar */}
       <aside style={{
-        width: collapsed ? '64px' : '220px',
+        width: isMobile ? (collapsed ? '0' : '280px') : (collapsed ? '64px' : '220px'),
         background: '#fff',
         borderRight: '1px solid #e8ecf4',
         display: 'flex',
@@ -110,9 +129,10 @@ export default function Layout() {
         transition: 'width 0.2s ease',
         overflow: 'hidden',
         flexShrink: 0,
-        position: 'sticky',
+        position: isMobile ? 'fixed' : 'sticky',
         top: 0,
         height: '100vh',
+        zIndex: 50,
       }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '20px 16px 16px', borderBottom: '1px solid #f1f5f9' }}>
@@ -169,14 +189,14 @@ export default function Layout() {
       </aside>
 
       {/* Main */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, marginLeft: isMobile ? 0 : undefined }}>
         {/* Top bar */}
-        <header style={{ background: '#fff', borderBottom: '1px solid #e8ecf4', padding: '0 24px', height: '56px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, position: 'sticky', top: 0, zIndex: 10 }}>
+        <header style={{ background: '#fff', borderBottom: '1px solid #e8ecf4', padding: isMobile ? '0 12px' : '0 24px', height: '56px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, position: 'sticky', top: 0, zIndex: 10 }}>
           <button onClick={() => setCollapsed(c => !c)}
             style={{ padding: '6px', borderRadius: '8px', border: 'none', background: 'none', cursor: 'pointer', color: '#64748b' }}>
-            {collapsed ? <Menu size={20} /> : <X size={20} />}
+            {isMobile ? (collapsed ? <Menu size={20} /> : <X size={20} />) : (collapsed ? <Menu size={20} /> : <X size={20} />)}
           </button>
-          <span style={{ fontSize: '13px', color: '#94a3b8', flex: 1 }}>
+          <span style={{ fontSize: isMobile ? '12px' : '13px', color: '#94a3b8', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {new Date().toLocaleDateString('uz-UZ', { day: 'numeric', month: 'long', year: 'numeric' })}
           </span>
           <NavLink to="/notifications" style={{ position: 'relative', padding: '6px', borderRadius: '8px', color: '#64748b', textDecoration: 'none', display: 'flex' }}>
@@ -209,12 +229,12 @@ export default function Layout() {
             <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <User size={13} color="#6366f1" />
             </div>
-            <span style={{ fontSize: '13px', fontWeight: '500', color: '#1e293b' }}>{user?.full_name?.split(' ')[0]}</span>
+            <span style={{ fontSize: isMobile ? '12px' : '13px', fontWeight: '500', color: '#1e293b', maxWidth: isMobile ? '80px' : undefined, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.full_name?.split(' ')[0]}</span>
           </NavLink>
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+        <main style={{ flex: 1, padding: isMobile ? '16px' : '24px', overflowY: 'auto', overflowX: 'hidden' }}>
           <Outlet />
         </main>
       </div>
